@@ -1,7 +1,7 @@
 # requirements.txt
 
-# Streamlit for creating interactive web apps
-streamlit>=1.25.0
+# HTTP library to make requests to external APIs
+requests==2.28.0
 
-# Jupyter Notebook for interactive computing
-jupyter
+# Streamlit library for building web apps and user interfaces
+streamlit==1.15.0
