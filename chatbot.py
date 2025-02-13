@@ -28,7 +28,7 @@ if user_input:
     data = {
         "model": "llama3-8b-8192",  # active model
         "messages": [{"role": "user", "content": user_input}],
-        "max_tokens": 100,
+        "max_tokens": 1000,
     }
 
     # Send the POST request to the Groq API
@@ -38,6 +38,12 @@ if user_input:
         response_data = response.json()
         # Extract and display chatbot's response
         chatbot_response = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        st.write(f"Chatbot: {chatbot_response}")
+        
+        # Increase the height based on the length of the response, ensuring it can hold large content
+        response_length = len(chatbot_response.splitlines())
+        height = max(600, 20 + response_length * 20)  # dynamically adjust height based on content
+        
+        # Display response in a scrollable text area with a dynamic height
+        st.text_area("Chatbot:", value=chatbot_response, height=height, max_chars=None)
     else:
         st.error(f"API request failed with status code {response.status_code}: {response.text}")
