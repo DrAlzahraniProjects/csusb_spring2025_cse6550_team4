@@ -1,11 +1,12 @@
 FROM python:3.10-slim
 
+# Copy your app into the container (make sure chatbot.py is in the current directory)
+COPY . /app
+
 # Install necessary packages
 RUN pip install --upgrade pip
 RUN pip install streamlit altair jupyter
 
-# Copy your app into the container (make sure chatbot.py is in the current directory)
-COPY . /app
 
 # Set the working directory
 WORKDIR /app
