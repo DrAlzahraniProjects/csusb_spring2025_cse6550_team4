@@ -49,7 +49,7 @@ You can run a Hello World in either Streamlit or Jupyter
 For Streamlit:
 
 ```bash
-docker run -p 8501:8501 csusb_spring2025_cse6550_team4
+docker run -p 8501:8501 -e GROQ_API_KEY=your_api_key csusb_spring2025_cse6550_team4
 
 ```
 
