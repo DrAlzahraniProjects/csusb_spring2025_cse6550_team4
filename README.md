@@ -44,7 +44,7 @@ docker build -t csusb_spring2025_cse6550_team4 .
 
 ### Step 5: Run the Docker Container
 
-You can run a Hello World in either Streamlit or Jupyter
+You can run a Chatbot in either Streamlit or Jupyter
 
 For Streamlit:
 
@@ -60,7 +60,7 @@ docker run -p 8888:8888 csusb_spring2025_cse6550_team4 jupyter notebook --ip=0.0
 
 ```
 
-### Step 6: Access the Hello World
+### Step 6: Access the Chatbot
 
 For Streamlit:
 
@@ -75,7 +75,7 @@ For Jupyter:
 
 For Streamlit:
 
-- Hello World is automatically displayed.
+- Chatbot is automatically displayed.
 
 Open browser at http://localhost:8501
 
