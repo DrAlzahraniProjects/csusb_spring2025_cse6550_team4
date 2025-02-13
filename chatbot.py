@@ -1,17 +1,21 @@
 import os
 import requests
 import streamlit as st
+
 # Streamlit UI for asking API key
 st.markdown("<h1 style='text-align: center; color: blue;'>CSUSB Team 4</h1>", unsafe_allow_html=True)
 st.title("Basic Chatbot with Llama 3")
-# Ask user for the Groq API Key
-GROQ_API_KEY = st.text_input("Please enter your Groq API Key:")
+
+# Ask user for the Groq API Key (hidden input)
+GROQ_API_KEY = st.text_input("Please enter your Groq API Key:", type="password")
+
 # Check if API Key is provided
 if not GROQ_API_KEY:
     st.warning("API Key is required to continue.")
 else:
     # Define the Groq API URL
     GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+
     # User input for chatbot conversation
     user_input = st.text_input("You: ")
     if user_input:
