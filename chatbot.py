@@ -13,6 +13,7 @@ if not GROQ_API_KEY:
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # Streamlit UI
+st.markdown("<h1 style='text-align: center; color: blue;'>CSUSB Team 4</h1>", unsafe_allow_html=True)
 st.title("Basic Chatbot with Llama 3")
 
 # User input
