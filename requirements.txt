@@ -5,3 +5,6 @@ requests==2.28.0
 
 # Streamlit library for building web apps and user interfaces
 streamlit==1.15.0
+
+# Jupyter Notebook for interactive computing
+jupyter
