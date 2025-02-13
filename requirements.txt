@@ -1,0 +1,7 @@
+# requirements.txt
+
+# Streamlit for creating interactive web apps
+streamlit>=1.25.0
+
+# Jupyter Notebook for interactive computing
+jupyter
