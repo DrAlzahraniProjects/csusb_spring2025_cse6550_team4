@@ -86,3 +86,7 @@ For Jupyter:
 3. Select **Run All Cells** to execute the code.
 
 ---
+
+### Hosted on CSE department web server
+
+https://sec.cse.csusb.edu/team14
