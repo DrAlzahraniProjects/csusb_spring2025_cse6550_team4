@@ -89,4 +89,11 @@ For Jupyter:
 
 ### Hosted on CSE department web server
 
-https://sec.cse.csusb.edu/team14
+For Streamlit:
+
+Open browser at https://sec.cse.csusb.edu/team14
+
+For Jupyter:
+
+Open browser at https://sec.cse.csusb.edu/team14/jupyter
+
