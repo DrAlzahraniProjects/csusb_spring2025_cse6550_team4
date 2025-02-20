@@ -10,9 +10,15 @@ st.title("Basic Chatbot with Llama 3")
 # Ask user for the Groq API Key (hidden input)
 GROQ_API_KEY = st.text_input("Please enter your Groq API Key:", type="password")
 
-# Initialize chat history in session state if not already present
+# Initialize chat history and confusion matrix in session state if not already present
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
+if "conf_matrix" not in st.session_state:
+    st.session_state.conf_matrix = {
+        "Positive": {"Positive": 0, "Negative": 0},
+        "Negative": {"Positive": 0, "Negative": 0}
+    }
 
 # Check if API Key is provided
 if not GROQ_API_KEY:
@@ -26,33 +32,30 @@ else:
     
     with col1:
         st.subheader("Confusion Matrix")
-        # Generate a sample confusion matrix (for demonstration purposes)
-        actual = np.array(np.random.choice(["Positive", "Negative"], 100))
-        predicted = np.array(np.random.choice(["Positive", "Negative"], 100))
-        
+        # Display the current confusion matrix
         data = {
             "Actual \\ Predicted": ["Positive", "Negative"],
-            "Positive": [
-                np.sum((actual == "Positive") & (predicted == "Positive")),
-                np.sum((actual == "Positive") & (predicted == "Negative"))
-            ],
-            "Negative": [
-                np.sum((actual == "Negative") & (predicted == "Positive")),
-                np.sum((actual == "Negative") & (predicted == "Negative"))
-            ],
+            "Positive": [st.session_state.conf_matrix["Positive"]["Positive"], st.session_state.conf_matrix["Positive"]["Negative"]],
+            "Negative": [st.session_state.conf_matrix["Negative"]["Positive"], st.session_state.conf_matrix["Negative"]["Negative"]],
         }
         df = pd.DataFrame(data).set_index("Actual \\ Predicted")
         st.table(df)
     
     with col2:
         st.subheader("Chatbot")
-        # Display chat history
-        for entry in st.session_state.chat_history:
-            with st.chat_message(entry["role"]):
-                st.markdown(entry["content"])
+        
+        # Create a fixed container for chat history
+        with st.container():
+            # Display chat history
+            for entry in st.session_state.chat_history:
+                with st.chat_message(entry["role"]):
+                    st.markdown(entry["content"])
+        
+        # Use a dynamic key to avoid duplicate keys
+        user_input_key = "user_input_" + str(len(st.session_state.chat_history))  # Unique key per message
         
         # User input for chatbot conversation
-        user_input = st.text_input("You:", key="user_input")
+        user_input = st.text_input("You:", key=user_input_key)
         
         if st.button("Send") and user_input:
             headers = {
@@ -82,8 +85,25 @@ else:
                 st.session_state.chat_history.append({"role": "user", "content": user_input})
                 st.session_state.chat_history.append({"role": "assistant", "content": chatbot_response})
                 
-                # Clear input field safely
-                st.session_state.pop("user_input", None)
-                st.rerun()
-            else:
-                st.error(f"API request failed with status code {response.status_code}: {response.text}")
+                # Display the chatbot response with an emoji
+                st.markdown(f"🤖 **Chatbot:** {chatbot_response}")
+                
+                # Display feedback buttons (Yes/No)
+                feedback_container = st.container()
+                with feedback_container:
+                    yes_button = st.button("Yes")
+                    no_button = st.button("No")
+                    
+                    if yes_button:
+                        # Update confusion matrix for correct response
+                        st.session_state.conf_matrix["Positive"]["Positive"] += 1  # Correct positive response
+                        st.success("✅ Feedback: Answer was satisfactory!")
+                    elif no_button:
+                        # Update confusion matrix for incorrect response
+                        st.session_state.conf_matrix["Negative"]["Negative"] += 1  # Incorrect response
+                        st.warning("❌ Feedback: Answer was not satisfactory!")
+
+                # Refresh the page by forcing Streamlit to recognize the session change
+                # Just update the session_state with changes, Streamlit automatically triggers a rerun
+                st.session_state.updated = True  # Trigger change in session state
+
