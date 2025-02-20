@@ -40,8 +40,6 @@ docker build -t csusb_spring2025_cse6550_team4 .
 
 ```bash
 docker run -p 8501:8501 -p 8888:8888 csusb_spring2025_cse6550_team4
-
-
 ```
 
 
