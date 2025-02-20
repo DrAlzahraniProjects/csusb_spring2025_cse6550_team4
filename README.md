@@ -14,7 +14,7 @@ Before you begin, ensure you have the following:
 Clone the GitHub repository to your local machine:
 
 ```bash
-git clone https://github.com/DrAlzahraniProjects/csusb_spring2025_cse6550_team4
+git clone --single-branch --branch docker https://github.com/DrAlzahraniProjects/csusb_spring2025_cse6550_team4.git
 ```
 
 ### Step 2: Navigate to the Repository
@@ -49,7 +49,8 @@ You can run a Chatbot in either Streamlit or Jupyter
 For Streamlit:
 
 ```bash
-docker run -p 8501:8501 csusb_spring2025_cse6550_team4
+docker run -p 8501:8501 -p 8888:8888 csusb_spring2025_cse6550_team4
+
 
 ```
 
