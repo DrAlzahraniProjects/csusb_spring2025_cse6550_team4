@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import pandas as pd
-import numpy as np
 
 # Streamlit UI Header
 st.markdown("<h1 style='text-align: center; color: blue;'>CSUSB Team 4</h1>", unsafe_allow_html=True)
@@ -10,9 +9,23 @@ st.title("Basic Chatbot with Llama 3")
 # Ask user for the Groq API Key (hidden input)
 GROQ_API_KEY = st.text_input("Please enter your Groq API Key:", type="password")
 
-# Initialize chat history in session state if not already present
+# Initialize chat history and confusion matrix in session state if not already present
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
+if "conf_matrix" not in st.session_state:
+    st.session_state.conf_matrix = {
+        "Positive": {"Positive": 0, "Negative": 0},
+        "Negative": {"Positive": 0, "Negative": 0}
+    }
+
+# Initialize user input state
+if "user_input" not in st.session_state:
+    st.session_state.user_input = ""
+
+# Ensure last message index is tracked for feedback
+if "last_message_index" not in st.session_state:
+    st.session_state.last_message_index = -1  # Default to -1 when there's no message
 
 # Check if API Key is provided
 if not GROQ_API_KEY:
@@ -26,34 +39,28 @@ else:
     
     with col1:
         st.subheader("Confusion Matrix")
-        # Generate a sample confusion matrix (for demonstration purposes)
-        actual = np.array(np.random.choice(["Positive", "Negative"], 100))
-        predicted = np.array(np.random.choice(["Positive", "Negative"], 100))
-        
+        # Display the current confusion matrix
         data = {
             "Actual \\ Predicted": ["Positive", "Negative"],
-            "Positive": [
-                np.sum((actual == "Positive") & (predicted == "Positive")),
-                np.sum((actual == "Positive") & (predicted == "Negative"))
-            ],
-            "Negative": [
-                np.sum((actual == "Negative") & (predicted == "Positive")),
-                np.sum((actual == "Negative") & (predicted == "Negative"))
-            ],
+            "Positive": [st.session_state.conf_matrix["Positive"]["Positive"], st.session_state.conf_matrix["Positive"]["Negative"]],
+            "Negative": [st.session_state.conf_matrix["Negative"]["Positive"], st.session_state.conf_matrix["Negative"]["Negative"]],
         }
         df = pd.DataFrame(data).set_index("Actual \\ Predicted")
         st.table(df)
     
     with col2:
         st.subheader("Chatbot")
-        # Display chat history
-        for entry in st.session_state.chat_history:
-            with st.chat_message(entry["role"]):
-                st.markdown(entry["content"])
         
-        # User input for chatbot conversation
-        user_input = st.text_input("You:", key="user_input")
+        # Create a fixed container for chat history
+        with st.container():
+            # Display chat history
+            for entry in st.session_state.chat_history:
+                with st.chat_message(entry["role"]):
+                    st.markdown(entry["content"])
         
+        # User input for chatbot conversation (cleared after sending)
+        user_input = st.text_input("You:", st.session_state.user_input)
+
         if st.button("Send") and user_input:
             headers = {
                 "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -82,8 +89,29 @@ else:
                 st.session_state.chat_history.append({"role": "user", "content": user_input})
                 st.session_state.chat_history.append({"role": "assistant", "content": chatbot_response})
                 
-                # Clear input field safely
-                st.session_state.pop("user_input", None)
+                # Store the latest message index for feedback tracking
+                st.session_state.last_message_index = len(st.session_state.chat_history)
+
+                # Clear the input field by resetting the user input session state
+                st.session_state.user_input = ""
+
+                # Force a rerun to update the UI (this clears the input field)
                 st.rerun()
-            else:
-                st.error(f"API request failed with status code {response.status_code}: {response.text}")
+
+# Feedback section (only show if a chatbot response was given)
+if st.session_state.last_message_index > 0:
+    st.subheader("Was this response helpful?")
+    
+    col_yes, col_no = st.columns(2)
+
+    with col_yes:
+        if st.button("Yes"):
+            st.session_state.conf_matrix["Positive"]["Positive"] += 1  # Correct positive response
+            st.success("✅ Feedback: Answer was satisfactory!")
+            st.rerun()  # Rerun to refresh UI
+
+    with col_no:
+        if st.button("No"):
+            st.session_state.conf_matrix["Negative"]["Negative"] += 1  # Incorrect response
+            st.warning("❌ Feedback: Answer was not satisfactory!")
+            st.rerun()  # Rerun to refresh UI
