@@ -25,9 +25,16 @@ Change to the cloned repository directory:
 cd csusb_spring2025_cse6550_team4
 ```
 
+### Step 3: Pull the Latest Version
+
+Update the repository to the latest version:
+
+```bash
+git pull origin main
+```
 
 
-### Step 3: Build the Docker Container
+### Step 4: Build the Docker Container
 
 Run the setup script to build and start the Docker container:
 
@@ -35,7 +42,7 @@ Run the setup script to build and start the Docker container:
 docker build -t csusb_spring2025_cse6550_team4 .
 ```
 
-### Step 4: Run the Docker Container
+### Step 5: Run the Docker Container
 
 
 ```bash
@@ -43,7 +50,7 @@ docker run -p 8501:8501 -p 8888:8888 csusb_spring2025_cse6550_team4
 ```
 
 
-### Step 5: Access the Chatbot
+### Step 6: Access the Chatbot
 
 For Streamlit:
 
@@ -54,7 +61,7 @@ For Jupyter:
 - Once the container starts, the terminal will display a URL (e.g., `http://127.0.0.1`) with a token.
 - Copy and paste this URL into your browser to access the Jupyter Notebook interface.
 
-### Step 6: Run the program
+### Step 7: Run the program
 
 For Streamlit:
 
