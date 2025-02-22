@@ -33,7 +33,6 @@ Update the repository to the latest version:
 git pull origin main
 ```
 
-
 ### Step 4: Build the Docker Container
 
 Run the setup script to build and start the Docker container:
@@ -44,17 +43,15 @@ docker build -t csusb_spring2025_cse6550_team4 .
 
 ### Step 5: Run the Docker Container
 
-
 ```bash
-docker run -p 8501:8501 -p 8888:8888 csusb_spring2025_cse6550_team4
+docker run -p 2504:2504 -p 2514:2514 csusb_spring2025_cse6550_team4
 ```
-
 
 ### Step 6: Access the Chatbot
 
 For Streamlit:
 
-- Once the container starts, Open browser at http://localhost:8501.
+- Once the container starts, Open browser at http://localhost:2504.
 
 For Jupyter:
 
@@ -66,8 +63,6 @@ For Jupyter:
 For Streamlit:
 
 - Chatbot is automatically displayed.
-
-Open browser at http://localhost:8501
 
 For Jupyter:
 
@@ -86,4 +81,3 @@ Open browser at https://sec.cse.csusb.edu/team14
 For Jupyter:
 
 Open browser at https://sec.cse.csusb.edu/team14/jupyter
-

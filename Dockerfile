@@ -15,7 +15,7 @@ COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # Expose the ports used by Jupyter and Streamlit
-EXPOSE 8888 8501
+EXPOSE 2504 2514
 
 # Start the application via the entrypoint script
 CMD ["./entrypoint.sh"]
