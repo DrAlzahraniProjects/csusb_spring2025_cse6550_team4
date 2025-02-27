@@ -1,5 +1,7 @@
 streamlit
 requests
+langchain
+openai
+faiss-cpu
+scrapy
 pandas
-numpy
-jupyter
