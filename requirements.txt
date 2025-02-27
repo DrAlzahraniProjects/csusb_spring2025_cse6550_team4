@@ -1,7 +1,9 @@
 streamlit
 requests
-langchain
-openai
-faiss-cpu
-scrapy
 pandas
+langchain-groq
+langchain-huggingface
+langchain-community
+langchain
+faiss-cpu
+python-dotenv
