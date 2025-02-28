@@ -57,17 +57,18 @@ For Jupyter:
 
 - http://localhost:2514/
 
-### Step 7: Run the program
 
-For Streamlit:
+### Step 7: Enable execute permissions for the Docker cleanup script:
 
-- Chatbot is automatically displayed.
+```bash
+chmod +x docker-cleanup.sh
+```
 
-For Jupyter:
+### Step 8: Run the script to stop and remove the Docker image:
 
-1. In Jupyter, navigate to `notebook.ipynb`.
-2. Open the notebook.
-3. Select **Run All Cells** to execute the code.
+```bash
+./docker-cleanup.sh
+```
 
 ---
 
