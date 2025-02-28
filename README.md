@@ -14,7 +14,7 @@ Before you begin, ensure you have the following:
 Clone the GitHub repository to your local machine:
 
 ```bash
-git clone --branch docker --single-branch https://github.com/DrAlzahraniProjects/csusb_spring2025_cse6550_team4.git
+git clone https://github.com/DrAlzahraniProjects/csusb_spring2025_cse6550_team4
 ```
 
 ### Step 2: Navigate to the Repository
@@ -41,7 +41,7 @@ Run the setup script to build and start the Docker container:
 chmod +x docker-launch.sh
 ```
 
-### Step 5: Run Build Script
+### Step 5: Run Build Script (enter your Groq API Key when prompted):
 
 ```bash
 ./docker-launch.sh
