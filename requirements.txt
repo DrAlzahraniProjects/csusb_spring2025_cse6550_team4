@@ -1,6 +1,9 @@
 streamlit
 requests
 pandas
-numpy
-jupyter
+langchain-groq
+langchain-huggingface
+langchain-community
+langchain
 faiss-cpu
+python-dotenv
