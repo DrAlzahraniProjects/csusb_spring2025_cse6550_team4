@@ -64,7 +64,7 @@ For Jupyter:
 chmod +x docker-cleanup.sh
 ```
 
-### Step 8: Run the script to stop and remove the Docker image:
+### Step 8: Run the script to stop and remove the Docker image and container :
 
 ```bash
 ./docker-cleanup.sh
