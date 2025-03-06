@@ -203,7 +203,7 @@ def display_metrics():
 def get_weighted_outcome(step):
     # Calculate probabilities
     tp_probability = 0.60  # 60% True Positive
-    tn_probability = 0.30  # 30% True Negative
+    tn_probability = 0.20  # 20% True Negative
     fp_probability = 0.10  # 10% False Positive
     fn_probability = 0.10  # 10% False Negative
     
