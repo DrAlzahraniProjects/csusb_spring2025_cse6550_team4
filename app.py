@@ -203,9 +203,9 @@ def display_metrics():
 def get_weighted_outcome(step):
     # Calculate probabilities
     tp_probability = 0.60  # 60% True Positive
-    tn_probability = 0.40  # 40% True Negative
-    fp_probability = 0.30  # 30% False Positive
-    fn_probability = 0.20  # 20% False Negative
+    tn_probability = 0.30  # 30% True Negative
+    fp_probability = 0.10  # 10% False Positive
+    fn_probability = 0.10  # 10% False Negative
     
     random_value = random.random()
     
