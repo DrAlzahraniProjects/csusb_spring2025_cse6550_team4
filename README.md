@@ -81,3 +81,11 @@ Open browser at https://sec.cse.csusb.edu/team14
 For Jupyter:
 
 Open browser at https://sec.cse.csusb.edu/team14/jupyter
+
+
+## Google Colab Notebook  
+
+We have integrated a Google Colab notebook for easy access and execution.
+
+[Open in Colab](https://colab.research.google.com/drive/1rzu_oXx2297ErRCGROk_eTNTBcL7QSKH)  
+
