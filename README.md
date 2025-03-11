@@ -76,11 +76,7 @@ chmod +x docker-cleanup.sh
 
 For Streamlit:
 
-Open browser at https://sec.cse.csusb.edu/team14
-
-For Jupyter:
-
-Open browser at https://sec.cse.csusb.edu/team14/jupyter
+Open browser at  https://sec.cse.csusb.edu/team4s25
 
 
 ## Google Colab Notebook  
