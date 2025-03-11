@@ -7,3 +7,4 @@ langchain-community
 langchain
 faiss-cpu
 python-dotenv
+scrapy
