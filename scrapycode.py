@@ -275,7 +275,8 @@ with tab1:
         with col1:
             st.subheader("📊 Confusion Matrix")
             df = pd.DataFrame.from_dict(st.session_state.conf_matrix, orient='index', columns=["Count"])
-            st.table(df.style.set_properties({"text-align": "center"}))
+            st.table(df.style.set_properties(subset=pd.IndexSlice[:, :], **{'text-align': 'center'}))
+
             
             display_metrics()
         
