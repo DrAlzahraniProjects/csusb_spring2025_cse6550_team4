@@ -7,6 +7,7 @@ from langchain.retrievers.document_compressors import LLMChainExtractor
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.docstore.document import Document
+from langchain.embeddings import OpenAIEmbeddings  # Added for embeddings
 import os
 import time
 import argparse
@@ -115,9 +116,11 @@ def run_scrapy_and_save_to_faiss():
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     texts = text_splitter.split_documents(documents)
 
-    # Create FAISS vector store
+    # Create FAISS vector store with embeddings
     if "faiss_index" not in st.session_state:
-        st.session_state.faiss_index = FAISS.from_documents(texts, embedding=None)  # Replace `embedding` with your embedding model
+        # Use OpenAI embeddings (or Hugging Face embeddings)
+        embeddings = OpenAIEmbeddings(openai_api_key="your_openai_api_key")  # Replace with your OpenAI API key
+        st.session_state.faiss_index = FAISS.from_documents(texts, embedding=embeddings)
 
 # Run Scrapy and save to FAISS on app startup
 if "faiss_index" not in st.session_state:
@@ -208,6 +211,7 @@ with tab1:
             df = pd.DataFrame.from_dict(st.session_state.conf_matrix, orient='index', columns=["Count"])
             st.table(df.style.set_properties(subset=pd.IndexSlice[:, :], **{'text-align': 'center'}))
 
+            
             display_metrics()
         
         with col2:
@@ -293,3 +297,14 @@ for question in ANSWERABLE_QUESTIONS:
 st.subheader("🚫 List of Questions That Our Chatbot Cannot Answer")
 for question in UNANSWERABLE_QUESTIONS:
     st.write(f"- {question}")
+
+
+
+   
+      
+
+
+   
+        
+     
+  
