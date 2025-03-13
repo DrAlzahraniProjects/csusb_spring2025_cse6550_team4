@@ -176,24 +176,27 @@ def calculate_metrics():
 
     if total == 0:
         return pd.DataFrame({
-            'Metric': ['Accuracy', 'Precision', 'Recall (Sensitivity)', 'Specificity', 'F1-Score'],
+            'Metric': ['Accuracy', 'Precision', 'Sensitivity (Recall)', 'Specificity', 'F1-Score'],
             'Value': [0.0, 0.0, 0.0, 0.0, 0.0]
         })
 
     accuracy = (tp + tn) / total
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0  # Sensitivity
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0  # Sensitivity = Recall
     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    f1 = 2 * (precision * sensitivity) / (precision + sensitivity) if (precision + sensitivity) > 0 else 0
 
     return pd.DataFrame({
-        'Metric': ['Accuracy', 'Precision', 'Recall (Sensitivity)', 'Specificity', 'F1-Score'],
-        'Value': [accuracy, precision, recall, specificity, f1]
+        'Metric': ['Accuracy', 'Precision', 'Sensitivity (Recall)', 'Specificity', 'F1-Score'],
+        'Value': [accuracy, precision, sensitivity, specificity, f1]
     })
+
 
 
 def display_metrics():
     metrics_df = calculate_metrics()
+    
+    # Formatting values to percentages
     metrics_df['Value'] = metrics_df['Value'].apply(lambda x: f"{x:.1%}")
 
     st.subheader("📈 Performance Metrics")
@@ -201,6 +204,7 @@ def display_metrics():
         'text-align': 'center',
         'font-size': '14px'
     }))
+
 
 def get_weighted_outcome(step):
     # Calculate probabilities
