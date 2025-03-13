@@ -14,7 +14,7 @@ Before you begin, ensure you have the following:
 Clone the GitHub repository to your local machine:
 
 ```bash
-git clone -b docker --single-branch https://github.com/DrAlzahraniProjects/csusb_spring2025_cse6550_team4.git
+git clone https://github.com/DrAlzahraniProjects/csusb_spring2025_cse6550_team4.git
 ```
 
 ### Step 2: Navigate to the Repository
@@ -25,7 +25,7 @@ Change to the cloned repository directory:
 cd csusb_spring2025_cse6550_team4
 ```
 
-### (This step is not needed during branch testing)Step 3: Pull the Latest Version
+### Step 3: Pull the Latest Version
 
 Update the repository to the latest version:
 
