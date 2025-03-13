@@ -1,39 +1,38 @@
+# Use official Python image as the base image
 FROM python:3.10-slim
 
-# Set the working directory
-WORKDIR /app
-
-# Install system dependencies required for Faiss and Apache
-RUN apt-get update && apt-get install -y \
+# Install the required Apache modules for proxy and WebSocket support
+RUN apt-get update && \
+    apt-get install -y \
     apache2 \
     apache2-utils \
-    libopenblas-dev \
     libapache2-mod-proxy-uwsgi \
     libxml2-dev \
     libxslt-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean
 
-# Copy requirements.txt and install dependencies
+# Set up the work directory
+WORKDIR /app
+
+# Copy your requirements.txt into the Docker container
 COPY requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy your application code into the container
+# Install Python dependencies from requirements.txt
+RUN pip install -r requirements.txt
+
+# Copy your Python code into the Docker container
 COPY . /app
 
-# Copy the entrypoint script and make it executable
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
-
-# Set up the Apache proxy configurations for team4s25 (removed Jupyter)
-RUN echo "ProxyPass \"/team4s25\" \"http://localhost:2504/team4s25\"" >> /etc/apache2/sites-available/000-default.conf && \
-    echo "ProxyPassReverse \"/team4s25\" \"http://localhost:2504/team4s25\"" >> /etc/apache2/sites-available/000-default.conf && \
-    echo "RewriteRule /team4s25/(.*) ws://localhost:2504/team4s25/$1 [P,L]" >> /etc/apache2/sites-available/000-default.conf
-
-# Enable Apache modules for proxy, WebSocket support, and rewriting
-RUN a2enmod proxy proxy_http proxy_uwsgi rewrite
-
-# Expose the ports for Streamlit (removed Jupyter port)
+# Expose port for Streamlit
 EXPOSE 2504
 
-# Start the application via the entrypoint script (starts Apache and Streamlit)
-CMD ["sh", "-c", "apache2ctl start & streamlit run app.py --server.maxUploadSize=10 --server.port=2504 --server.baseUrlPath=/team4s25"]
+# Set up the Apache proxy configurations
+RUN echo "ProxyPass /team4s25 http://localhost:2504/team4s25" >> /etc/apache2/sites-available/000-default.conf && \
+    echo "ProxyPassReverse /team4s25 http://localhost:2504/team4s25" >> /etc/apache2/sites-available/000-default.conf && \
+    echo "RewriteRule /team4s25/(.*) ws://localhost:2504/team4s25/$1 [P,L]" >> /etc/apache2/sites-available/000-default.conf
+
+# Enable Apache modules for proxy and WebSocket support
+RUN a2enmod proxy proxy_http rewrite
+
+# Start Apache and Streamlit using `sh` in the CMD
+CMD ["sh", "-c", "apache2ctl start & streamlit run app.py --server.port=2504 --server.baseUrlPath=/team4s25"]
