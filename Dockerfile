@@ -1,16 +1,11 @@
 # Use official Python image as the base image
 FROM python:3.10-slim
 
-# Install dependencies for running Apache and Streamlit
+# Install the required Apache modules for proxy and WebSocket support
 RUN apt-get update && \
     apt-get install -y \
     apache2 \
     apache2-utils \
-    && apt-get clean
-
-# Install the required Apache modules for proxy and WebSocket support
-RUN apt-get update && \
-    apt-get install -y \
     libapache2-mod-proxy-uwsgi \
     libxml2-dev \
     libxslt-dev \
@@ -18,7 +13,6 @@ RUN apt-get update && \
 
 # Set up the work directory
 WORKDIR /app
-
 
 # Copy your requirements.txt into the Docker container
 COPY requirements.txt /app/requirements.txt
@@ -28,7 +22,6 @@ RUN pip install -r requirements.txt
 
 # Copy your Python code into the Docker container
 COPY . /app
-
 
 # Expose port for Streamlit
 EXPOSE 2504
