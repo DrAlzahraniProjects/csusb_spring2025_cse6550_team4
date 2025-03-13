@@ -53,10 +53,6 @@ For Streamlit:
 
 - Once the container starts, Open browser at http://localhost:2504.
 
-For Jupyter:
-
-- http://localhost:2514/
-
 
 ### Step 7: Enable execute permissions for the Docker cleanup script:
 
