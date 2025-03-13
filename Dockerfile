@@ -1,26 +1,45 @@
+# Use official Python image as the base image
 FROM python:3.10-slim
 
-# Set the working directory
+# Install dependencies for running Apache and Streamlit
+RUN apt-get update && \
+    apt-get install -y \
+    apache2 \
+    apache2-utils \
+    && apt-get clean
+
+# Install the required Apache modules for proxy and WebSocket support
+RUN apt-get update && \
+    apt-get install -y \
+    libapache2-mod-proxy-uwsgi \
+    libxml2-dev \
+    libxslt-dev \
+    && apt-get clean
+
+# Set up the work directory
 WORKDIR /app
 
-# Install system dependencies required for Faiss
-RUN apt-get update && apt-get install -y \
-    libopenblas-dev \
-    && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements.txt and install dependencies
+# Copy your requirements.txt into the Docker container
 COPY requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy your application code into the container
+# Install Python dependencies from requirements.txt
+RUN pip install -r requirements.txt
+
+# Copy your Python code into the Docker container
 COPY . /app
 
-# Copy the entrypoint script and make it executable
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
 
-# Expose the ports used by Streamlit and Jupyter
-EXPOSE 2504 2514
+# Expose port for Streamlit
+EXPOSE 2504
 
-# Start the application via the entrypoint script
-CMD ["./entrypoint.sh"]
+# Set up the Apache proxy configurations
+RUN echo "ProxyPass /team4s25 http://localhost:2504/team4s25" >> /etc/apache2/sites-available/000-default.conf && \
+    echo "ProxyPassReverse /team4s25 http://localhost:2504/team4s25" >> /etc/apache2/sites-available/000-default.conf && \
+    echo "RewriteRule /team4s25/(.*) ws://localhost:2504/team4s25/$1 [P,L]" >> /etc/apache2/sites-available/000-default.conf
+
+# Enable Apache modules for proxy and WebSocket support
+RUN a2enmod proxy proxy_http rewrite
+
+# Start Apache and Streamlit using `sh` in the CMD
+CMD ["sh", "-c", "apache2ctl start & streamlit run app.py --server.port=2504 --server.baseUrlPath=/team4s25"]
