@@ -195,7 +195,7 @@ def calculate_metrics():
 def display_metrics():
     metrics_df = calculate_metrics()
     metrics_df['Value'] = metrics_df['Value'].apply(lambda x: f"{x:.1%}")
-    
+
     st.subheader("📈 Performance Metrics")
     st.table(metrics_df.style.set_properties(**{
         'text-align': 'center',
