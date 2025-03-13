@@ -14,7 +14,7 @@ Before you begin, ensure you have the following:
 Clone the GitHub repository to your local machine:
 
 ```bash
-git clone https://github.com/DrAlzahraniProjects/csusb_spring2025_cse6550_team4
+git clone -b docker --single-branch https://github.com/DrAlzahraniProjects/csusb_spring2025_cse6550_team4.git
 ```
 
 ### Step 2: Navigate to the Repository
@@ -25,7 +25,7 @@ Change to the cloned repository directory:
 cd csusb_spring2025_cse6550_team4
 ```
 
-### Step 3: Pull the Latest Version
+### (This step is not needed during branch testing)Step 3: Pull the Latest Version
 
 Update the repository to the latest version:
 
@@ -52,10 +52,6 @@ chmod +x docker-launch.sh
 For Streamlit:
 
 - Once the container starts, Open browser at http://localhost:2504.
-
-For Jupyter:
-
-- http://localhost:2514/
 
 
 ### Step 7: Enable execute permissions for the Docker cleanup script:
