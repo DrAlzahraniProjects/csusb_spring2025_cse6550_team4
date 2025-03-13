@@ -15,4 +15,4 @@ docker build -t $CONT_NAME .
 docker run -d -p $PORT_NUM:$PORT_NUM --name $CONT_NAME -e GROQ_API_KEY="$GROQ_API_KEY" $CONT_NAME
 
 # Output where the app is running
-echo "Streamlit is available at: http://localhost:$PORT_NUM"
+echo "Streamlit is available at: http://localhost:$PORT_NUM/team4s25"
