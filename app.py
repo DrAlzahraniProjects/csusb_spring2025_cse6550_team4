@@ -171,24 +171,26 @@ def calculate_metrics():
     fp = cm["FP"]
     tn = cm["TN"]
     fn = cm["FN"]
-    
+
     total = tp + fp + tn + fn
-    
+
     if total == 0:
         return pd.DataFrame({
-            'Metric': ['Accuracy', 'Precision', 'Recall', 'F1-Score'],
-            'Value': [0.0, 0.0, 0.0, 0.0]
+            'Metric': ['Accuracy', 'Precision', 'Recall (Sensitivity)', 'Specificity', 'F1-Score'],
+            'Value': [0.0, 0.0, 0.0, 0.0, 0.0]
         })
-    
+
     accuracy = (tp + tn) / total
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0  # Sensitivity
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
     f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-    
+
     return pd.DataFrame({
-        'Metric': ['Accuracy', 'Precision', 'Recall', 'F1-Score'],
-        'Value': [accuracy, precision, recall, f1]
+        'Metric': ['Accuracy', 'Precision', 'Recall (Sensitivity)', 'Specificity', 'F1-Score'],
+        'Value': [accuracy, precision, recall, specificity, f1]
     })
+
 
 def display_metrics():
     metrics_df = calculate_metrics()
