@@ -1,3 +1,5 @@
+import os
+import time
 import streamlit as st
 import requests
 import pandas as pd
@@ -5,23 +7,19 @@ from langchain_groq import ChatGroq
 from langchain_community.vectorstores import FAISS
 from langchain.retrievers.document_compressors import LLMChainExtractor
 from langchain.retrievers import ContextualCompressionRetriever
-import os
-import time
 import argparse
 from dotenv import load_dotenv
 import random
 
-# Load environment variables and setup
 load_dotenv()
 parser = argparse.ArgumentParser(description='RecWell Chatbot App')
 parser.add_argument('--groq_api_key', type=str, help='Groq API Key')
 args, _ = parser.parse_known_args()
 
-# UI Header
+st.set_page_config(page_title="CSUSB RecWell Chatbot", page_icon="🚀")
 st.markdown("<h1 style='text-align: center; color: #4A90E2;'>CSUSB Team 4</h1>", unsafe_allow_html=True)
 st.title("🚀 AI Chatbot with Llama 3")
 
-# API Key handling
 api_key = os.environ.get("GROQ_API_KEY") or args.groq_api_key
 
 if "GROQ_API_KEY" not in st.session_state:
@@ -30,23 +28,20 @@ if "GROQ_API_KEY" not in st.session_state:
 if not st.session_state.GROQ_API_KEY:
     st.session_state.GROQ_API_KEY = st.text_input("🔑 Enter your Groq API Key:", type="password")
 
-# Initialize session states
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "conf_matrix" not in st.session_state:
-    st.session_state.conf_matrix = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}
-if "last_message_index" not in st.session_state:
-    st.session_state.last_message_index = -1
-if "user_input" not in st.session_state:
-    st.session_state.user_input = ""
-if "auto_dialogue_running" not in st.session_state:
-    st.session_state.auto_dialogue_running = False
-if "auto_dialogue_step" not in st.session_state:
-    st.session_state.auto_dialogue_step = 0
-if "auto_dialogue_results" not in st.session_state:
-    st.session_state.auto_dialogue_results = []
+session_state_vars = {
+    "chat_history": [],
+    "conf_matrix": {"TP": 0, "FP": 0, "TN": 0, "FN": 0},
+    "last_message_index": -1,
+    "user_input": "",
+    "auto_dialogue_running": False,
+    "auto_dialogue_step": 0,
+    "auto_dialogue_results": []
+}
 
-# Knowledge bases and configurations
+for var, default in session_state_vars.items():
+    if var not in st.session_state:
+        st.session_state[var] = default
+
 SYSTEM_PROMPT = """You are Beta, an assistant for the Recreation and Wellness Center at CSUSB.
 You should ONLY respond with a clear 'Yes' or 'No' at the start of your response, followed by relevant information.
 If you truly don't know, start with 'I don't have enough information' and explain why.
@@ -75,6 +70,18 @@ UNANSWERABLE_QUESTIONS = (
     "How big and tall is the rock wall?"
 )
 
+def format_response_time(start_time):
+    end_time = time.time()
+    response_time = end_time - start_time
+    if response_time < 1:
+        return f"{response_time*1000:.0f}ms"
+    elif response_time < 60:
+        return f"{response_time:.1f}s"
+    else:
+        minutes = int(response_time // 60)
+        seconds = response_time % 60
+        return f"{minutes}m {seconds:.1f}s"
+
 def get_llm(model_name="llama3-8b-8192"):
     if st.session_state.GROQ_API_KEY:
         return ChatGroq(
@@ -97,6 +104,9 @@ def similarity_score(text1, text2):
     return (total_matches + keyword_matches * 2) / (len(words1.union(words2)))
 
 def get_response(user_input, is_alpha=False):
+    start_time = time.time()
+    time.sleep(random.uniform(0.5, 2.0))
+    
     max_similarity = 0
     best_response = None
     
@@ -107,11 +117,11 @@ def get_response(user_input, is_alpha=False):
             best_response = answer
 
     if max_similarity > 0.8:
-        return best_response, max_similarity
+        return best_response, max_similarity, format_response_time(start_time)
         
     for question in UNANSWERABLE_QUESTIONS:
         if similarity_score(user_input, question) > 0.7:
-            return "I don't have enough information to answer this specific question. Please contact the Recreation Center directly for accurate details.", 0.3
+            return "I don't have enough information to answer this specific question. Please contact the Recreation Center directly for accurate details.", 0.3, format_response_time(start_time)
             
     if st.session_state.GROQ_API_KEY:
         headers = {
@@ -140,26 +150,31 @@ def get_response(user_input, is_alpha=False):
             
             if response.status_code == 200:
                 content = response.json()["choices"][0]["message"]["content"]
-                return content, max_similarity
+                return content, max_similarity, format_response_time(start_time)
                 
         except Exception as e:
-            return f"Error: {str(e)}", 0
+            return f"Error: {str(e)}", 0, format_response_time(start_time)
             
-    return "I don't have enough information to answer this question.", 0
+    return "I don't have enough information to answer this question.", 0, format_response_time(start_time)
 
 def send_message(user_input=None, is_alpha=False, intended_outcome=None):
     if user_input is None:
         user_input = st.session_state.user_input.strip()
     if not user_input:
-        return
+        return None, 0
 
-    response, confidence = get_response(user_input, is_alpha)
+    start_time = time.time()
+    response, confidence, response_time = get_response(user_input, is_alpha)
     
     user_prefix = "Alpha: " if is_alpha else ""
     assistant_prefix = "Beta: "
     
     st.session_state.chat_history.append({"role": "user", "content": f"{user_prefix}{user_input}"})
-    st.session_state.chat_history.append({"role": "assistant", "content": f"{assistant_prefix}{response}"})
+    st.session_state.chat_history.append({
+        "role": "assistant", 
+        "content": f"{assistant_prefix}{response}\n\nResponse time: {response_time}"
+    })
+    
     st.session_state.last_message_index = len(st.session_state.chat_history)
     st.session_state.user_input = ""
     
@@ -182,7 +197,7 @@ def calculate_metrics():
 
     accuracy = (tp + tn) / total
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0  # Sensitivity = Recall
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
     f1 = 2 * (precision * sensitivity) / (precision + sensitivity) if (precision + sensitivity) > 0 else 0
 
@@ -191,27 +206,20 @@ def calculate_metrics():
         'Value': [accuracy, precision, sensitivity, specificity, f1]
     })
 
-
-
 def display_metrics():
     metrics_df = calculate_metrics()
-    
-    # Formatting values to percentages
     metrics_df['Value'] = metrics_df['Value'].apply(lambda x: f"{x:.1%}")
-
     st.subheader("📈 Performance Metrics")
     st.table(metrics_df.style.set_properties(**{
         'text-align': 'center',
         'font-size': '14px'
     }))
 
-
 def get_weighted_outcome(step):
-    # Calculate probabilities
-    tp_probability = 0.60  # 60% True Positive
-    tn_probability = 0.20  # 20% True Negative
-    fp_probability = 0.10  # 10% False Positive
-    fn_probability = 0.10  # 10% False Negative
+    tp_probability = 0.60
+    tn_probability = 0.20
+    fp_probability = 0.10
+    fn_probability = 0.10
     
     random_value = random.random()
     
@@ -225,7 +233,7 @@ def get_weighted_outcome(step):
         return "FN", random.uniform(0.3, 0.4)
 
 def run_auto_dialogue():
-    if st.session_state.auto_dialogue_step >= 10:  # Changed back to >= 10 to ensure exactly 10 questions
+    if st.session_state.auto_dialogue_step >= 10:
         st.session_state.auto_dialogue_running = False
         return
     
@@ -238,7 +246,18 @@ def run_auto_dialogue():
     else:
         question = random.choice(list(UNANSWERABLE_QUESTIONS))
     
-    response, actual_confidence = send_message(question, is_alpha=True)
+    with st.spinner('Thinking...'):
+        response, actual_confidence, response_time = get_response(question, is_alpha=True)
+    
+    # Add messages to chat history
+    st.session_state.chat_history.append({
+        "role": "user",
+        "content": f"Alpha: {question}"
+    })
+    st.session_state.chat_history.append({
+        "role": "assistant",
+        "content": f"Beta: {response}\n\nResponse time: {response_time}"
+    })
     
     st.session_state.conf_matrix[outcome_type] += 1
     st.session_state.auto_dialogue_results.append({
@@ -246,69 +265,85 @@ def run_auto_dialogue():
         "question": question,
         "confidence": f"{confidence:.1%}",
         "response": response,
-        "outcome": outcome_type
+        "outcome": outcome_type,
+        "response_time": response_time
     })
     
+    time.sleep(2)
     st.session_state.auto_dialogue_step += 1
 
-# UI tabs
+# Main UI Implementation
 tab1, tab2 = st.tabs(["Chat", "Auto Dialogue"])
 
 with tab1:
     if not st.session_state.GROQ_API_KEY:
         st.warning("⚠️ API Key is required to continue.")
     else:
-        col1, col2 = st.columns([2, 3])
-        with col1:
-            st.subheader("📊 Confusion Matrix")
-            df = pd.DataFrame.from_dict(st.session_state.conf_matrix, orient='index', columns=["Count"])
-            st.table(df.style.set_properties(**{"text-align": "center"}))
-            
-            display_metrics()
+        chat_interface = st.container()
         
-        with col2:
-            st.subheader("💬 Chatbot")
+        with chat_interface:
+            col1, col2 = st.columns([2, 3])
             
-            for entry in st.session_state.chat_history:
-                with st.chat_message("user" if entry["role"] == "user" else "assistant"):
-                    st.write(entry["content"])
+            with col1:
+                st.subheader("📊 Confusion Matrix")
+                df = pd.DataFrame.from_dict(st.session_state.conf_matrix, orient='index', columns=["Count"])
+                st.table(df.style.set_properties(**{"text-align": "center"}))
+                display_metrics()
+            
+            with col2:
+                st.subheader("💬 Chatbot")
+                chat_container = st.container()
+                with chat_container:
+                    for message in st.session_state.chat_history:
+                        if message["role"] == "user":
+                            with st.chat_message("user", avatar="🧑"):
+                                st.write(message["content"])
+                        else:
+                            with st.chat_message("assistant", avatar="🤖"):
+                                parts = message["content"].split("\n\nResponse time:")
+                                st.write(parts[0])
+                                if len(parts) > 1:
+                                    st.caption(f"⏱️ Response time: {parts[1].strip()}")
 
         user_input = st.chat_input("Type your message here...")
         if user_input:
-            st.session_state.user_input = user_input
-            send_message()
+            with st.spinner("Thinking..."):
+                start_time = time.time()
+                response, confidence = send_message(user_input)
+                response_time = format_response_time(start_time)
+            st.rerun()
 
-    if st.session_state.last_message_index > 0:
-        st.subheader("🤔 Was this response correct?")
-        col_tp, col_fp, col_tn, col_fn = st.columns(4)
-        
-        with col_tp:
-            if st.button("✅ Correctly Answerable (TP)"):
-                st.session_state.conf_matrix["TP"] += 1
-                st.success("✅ Thank you for your feedback!")
-                st.session_state.last_message_index = -1
-                st.rerun()
-        
-        with col_fp:
-            if st.button("⚠️ Incorrectly Answerable (FP)"):
-                st.session_state.conf_matrix["FP"] += 1
-                st.warning("❌ Thanks! We'll improve.")
-                st.session_state.last_message_index = -1
-                st.rerun()
-        
-        with col_tn:
-            if st.button("✅ Correctly Unanswerable (TN)"):
-                st.session_state.conf_matrix["TN"] += 1
-                st.success("✅ Thank you for your feedback!")
-                st.session_state.last_message_index = -1
-                st.rerun()
-        
-        with col_fn:
-            if st.button("❌ Incorrectly Unanswerable (FN)"):
-                st.session_state.conf_matrix["FN"] += 1
-                st.warning("❌ Thanks! We'll improve.")
-                st.session_state.last_message_index = -1
-                st.rerun()
+        if st.session_state.last_message_index > 0:
+            st.subheader("🤔 Was this response correct?")
+            col_tp, col_fp, col_tn, col_fn = st.columns(4)
+            
+            with col_tp:
+                if st.button("✅ Correctly Answerable (TP)"):
+                    st.session_state.conf_matrix["TP"] += 1
+                    st.success("✅ Thank you for your feedback!")
+                    st.session_state.last_message_index = -1
+                    st.rerun()
+            
+            with col_fp:
+                if st.button("⚠️ Incorrectly Answerable (FP)"):
+                    st.session_state.conf_matrix["FP"] += 1
+                    st.warning("❌ Thanks! We'll improve.")
+                    st.session_state.last_message_index = -1
+                    st.rerun()
+            
+            with col_tn:
+                if st.button("✅ Correctly Unanswerable (TN)"):
+                    st.session_state.conf_matrix["TN"] += 1
+                    st.success("✅ Thank you for your feedback!")
+                    st.session_state.last_message_index = -1
+                    st.rerun()
+            
+            with col_fn:
+                if st.button("❌ Incorrectly Unanswerable (FN)"):
+                    st.session_state.conf_matrix["FN"] += 1
+                    st.warning("❌ Thanks! We'll improve.")
+                    st.session_state.last_message_index = -1
+                    st.rerun()
 
 with tab2:
     st.subheader("🤖 Alpha-Beta Automated Dialogue")
@@ -319,7 +354,6 @@ with tab2:
             st.session_state.auto_dialogue_running = True
             st.session_state.auto_dialogue_step = 0
             st.session_state.auto_dialogue_results = []
-            st.session_state.chat_history = []
             st.session_state.conf_matrix = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}
             st.rerun()
     else:
@@ -331,7 +365,7 @@ with tab2:
         if st.session_state.auto_dialogue_step >= 10:
             st.success("Automated dialogue completed!")
             results_df = pd.DataFrame(st.session_state.auto_dialogue_results)
-            results_df = results_df[["Question #", "question", "confidence", "outcome", "response"]]
+            results_df = results_df[["Question #", "question", "confidence", "outcome", "response_time", "response"]]
             st.write("Dialogue Results:")
             st.dataframe(results_df)
             
@@ -341,7 +375,6 @@ with tab2:
         else:
             st.rerun()
 
-# Display question lists
 st.subheader("❓ List of Questions That Our Chatbot Can Answer")
 for question in ANSWERABLE_QUESTIONS:
     st.write(f"- {question}")
