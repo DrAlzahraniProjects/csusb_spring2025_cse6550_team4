@@ -1,15 +1,16 @@
 # Stage 1: Build stage
 FROM python:3.10-slim as build
 
-# Install the required Apache modules for proxy and WebSocket support
+# Install build dependencies (minimal required ones)
 RUN apt-get update && \
-    apt-get install -y \
+    apt-get install --no-install-recommends -y \
     apache2 \
     apache2-utils \
     libapache2-mod-proxy-uwsgi \
     libxml2-dev \
-    libxslt-dev \
-    && apt-get clean
+    libxslt-dev && \
+    apt-get clean
+
 
 # Set up the work directory
 WORKDIR /app
