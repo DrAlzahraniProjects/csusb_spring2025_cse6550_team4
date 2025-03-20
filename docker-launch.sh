@@ -4,6 +4,9 @@
 CONT_NAME="team4s25-app"
 PORT_NUM=2504
 
+# Run cleanup script before building a new image
+./docker-cleanup.sh
+
 # Asks for API Key from User
 echo "Please enter your API key from GROQ:"
 read GROQ_API_KEY

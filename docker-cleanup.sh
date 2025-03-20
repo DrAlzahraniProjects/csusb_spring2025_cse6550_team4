@@ -1,18 +1,32 @@
 #!/bin/bash
 
-# Define container name
-CONTAINER_NAME="team4s25-app"
+APP_NAME="team4s25-app"
 
-# Stop the running container
-echo "Stopping Docker container..."
-docker stop $CONTAINER_NAME
+# Check and stop running containers
+RUNNING_CONTAINERS=$(docker ps -q --filter "name=$APP_NAME")
+if [ -n "$RUNNING_CONTAINERS" ]; then
+    echo "Stopping running containers for $APP_NAME..."
+    docker stop $RUNNING_CONTAINERS
+else
+    echo "No running containers found for $APP_NAME."
+fi
 
-# Remove the container
-echo "Removing Docker container..."
-docker rm $CONTAINER_NAME
+# Check and remove running/stopped containers
+CONTAINERS=$(docker ps -a -q --filter "name=$APP_NAME")
+if [ -n "$CONTAINERS" ]; then
+    echo "Removing containers for $APP_NAME..."
+    docker rm -f $CONTAINERS
+else
+    echo "No containers found for $APP_NAME."
+fi
 
-# Remove the Docker image
-echo "Removing Docker image..."
-docker rmi $CONTAINER_NAME
+# Check and remove images
+IMAGES=$(docker images -q "$APP_NAME")
+if [ -n "$IMAGES" ]; then
+    echo "Removing image $APP_NAME..."
+    docker rmi -f $IMAGES
+else
+    echo "No image found for $APP_NAME."
+fi
 
-echo "Cleanup complete."
+echo "Cleanup completed."

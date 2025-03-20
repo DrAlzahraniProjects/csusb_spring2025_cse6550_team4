@@ -2,6 +2,7 @@
 FROM python:3.10-slim as build
 
 # Install build dependencies
+
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
     apache2 \
@@ -20,12 +21,16 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 
 # Install dependencies (with no cache to reduce size)
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy your Python code into the Docker container
-COPY . /app
+COPY app.py /app
 
-# Expose port for Streamlit
+# Copy the rest of the app files
+COPY . /app/
+
+# Expose necessary port for Streamlit
 EXPOSE 2504
 
 # Set up the Apache proxy configurations
@@ -33,7 +38,7 @@ RUN echo "ProxyPass /team4s25 http://localhost:2504/team4s25" >> /etc/apache2/si
     echo "ProxyPassReverse /team4s25 http://localhost:2504/team4s25" >> /etc/apache2/sites-available/000-default.conf && \
     echo "RewriteRule /team4s25/(.*) ws://localhost:2504/team4s25/$1 [P,L]" >> /etc/apache2/sites-available/000-default.conf
 
-# Enable Apache modules for proxy and WebSocket support
+# Enable Apache modules for proxy support
 RUN a2enmod proxy proxy_http rewrite
 
 # Stage 2: Runtime stage (final image)
