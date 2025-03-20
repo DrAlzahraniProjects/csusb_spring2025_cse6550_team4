@@ -1,6 +1,10 @@
-faiss-cpu
-flashrank
-langchain-community
-langchain-groq
-langchain-ollama
 streamlit
+requests
+pandas
+langchain-groq
+langchain
+python-dotenv
+scrapy
+beautifulsoup4
+scikit-learn
+numpy

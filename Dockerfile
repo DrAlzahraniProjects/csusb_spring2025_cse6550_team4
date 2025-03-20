@@ -1,26 +1,20 @@
-# Use a lightweight Python image
+# Use a lightweight Python base image
 FROM python:3.10-slim-bookworm
 
-# Install dependencies for running Apache and Streamlit
+# Install Apache and Streamlit dependencies in one go and clean up afterward
 RUN apt-get update && \
     apt-get install -y \
     apache2 \
     apache2-utils \
-    && apt-get clean
-
-# Install the required Apache modules for proxy support
-RUN apt-get update && \
-    apt-get install -y \
     libapache2-mod-proxy-uwsgi \
     libxml2-dev \
     libxslt-dev \
-    && apt-get clean
+    gcc \
+    && apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
-
-# Install dependencies for building certain Python packages
-RUN apt-get update && apt-get install -y gcc
 
 # Copy only requirements first to leverage Docker caching
 COPY requirements.txt /app/
