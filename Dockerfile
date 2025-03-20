@@ -58,3 +58,6 @@ WORKDIR /app
 
 # Expose port 2504 for Streamlit
 EXPOSE 2504
+
+# Start Apache and Streamlit
+CMD ["sh", "-c", "apache2ctl start & streamlit run app.py --server.port=2504 --server.baseUrlPath=/team4s25"]
