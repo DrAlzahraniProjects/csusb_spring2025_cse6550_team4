@@ -1,7 +1,7 @@
 # Stage 1: Build stage
 FROM python:3.10-slim as build
 
-# Install build dependencies (only the necessary ones)
+# Install build dependencies
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
     apache2 \
@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 # Set working directory
 WORKDIR /app
 
-# Install missing Python packages (ensure they are available in runtime)
+# Install Python packages including scikit-learn explicitly
 RUN pip install --no-cache-dir \
     streamlit \
     requests \
