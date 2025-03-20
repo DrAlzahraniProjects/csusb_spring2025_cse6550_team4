@@ -20,7 +20,7 @@ WORKDIR /app
 # Copy requirements.txt
 COPY requirements.txt /app/requirements.txt
 
-# Install dependencies (with no cache)
+# Install dependencies (with no cache to reduce size)
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy your Python code into the Docker container
@@ -39,3 +39,7 @@ RUN a2enmod proxy proxy_http rewrite
 
 # Start Apache and Streamlit using `sh` in the CMD
 CMD ["sh", "-c", "apache2ctl start & streamlit run app.py --server.port=2504 --server.baseUrlPath=/team4s25"]
+
+# Stage 2: Runtime stage (final image)
+FROM python:3.10-slim
+
