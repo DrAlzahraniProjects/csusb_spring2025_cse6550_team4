@@ -12,8 +12,6 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-
-
 # Set up work directory
 WORKDIR /app
 
@@ -37,9 +35,6 @@ RUN echo "ProxyPass /team4s25 http://localhost:2504/team4s25" >> /etc/apache2/si
 # Enable Apache modules for proxy and WebSocket support
 RUN a2enmod proxy proxy_http rewrite
 
-# Start Apache and Streamlit using `sh` in the CMD
-CMD ["sh", "-c", "apache2ctl start & streamlit run app.py --server.port=2504 --server.baseUrlPath=/team4s25"]
-
 # Stage 2: Runtime stage (final image)
 FROM python:3.10-slim
 
@@ -47,8 +42,10 @@ FROM python:3.10-slim
 COPY --from=build /usr/local/lib/python3.10 /usr/local/lib/python3.10
 COPY --from=build /usr/local/bin /usr/local/bin
 
+# Copy only the necessary Apache configuration from the build stage
+COPY --from=build /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/000-default.conf
 
-# Install runtime dependencies (Apache)
+# Install minimal runtime dependencies (Apache)
 RUN apt-get update && apt-get install --no-install-recommends -y \
     apache2-utils && \
     rm -rf /var/lib/apt/lists/*
