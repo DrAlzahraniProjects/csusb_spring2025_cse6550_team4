@@ -1,5 +1,5 @@
 # Use a lightweight Python base image
-FROM python:3.10-slim-bookworm
+FROM python:3.13-slim-bookworm
 
 # Install Apache and Streamlit dependencies in one go and clean up afterward
 RUN apt-get update && \
