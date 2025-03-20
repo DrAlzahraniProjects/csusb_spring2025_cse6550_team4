@@ -55,3 +55,6 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 
 # Set working directory
 WORKDIR /app
+
+# Expose port 2504 for Streamlit
+EXPOSE 2504
