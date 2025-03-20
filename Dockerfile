@@ -1,5 +1,5 @@
-# Use official Python image as the base image
-FROM python:3.10-slim
+# Stage 1: Build stage
+FROM python:3.10-slim as build
 
 # Install the required Apache modules for proxy and WebSocket support
 RUN apt-get update && \
