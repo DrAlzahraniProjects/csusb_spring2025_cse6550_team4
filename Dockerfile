@@ -1,7 +1,7 @@
 # Stage 1: Build stage
 FROM python:3.10-slim as build
 
-# Install build dependencies (minimal required ones)
+# Install build dependencies (only the necessary ones)
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
     apache2 \
@@ -9,7 +9,9 @@ RUN apt-get update && \
     libapache2-mod-proxy-uwsgi \
     libxml2-dev \
     libxslt-dev && \
-    apt-get clean
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 
 
 # Set up work directory
