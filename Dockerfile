@@ -1,34 +1,30 @@
-# Use a lightweight Python base image
-FROM python:3.13-slim-bookworm
+# Stage 1: Build stage
+FROM python:3.10-slim as build
 
-# Install Apache and Streamlit dependencies in one go and clean up afterward
+# Install build dependencies (only the necessary ones)
 RUN apt-get update && \
-    apt-get install -y \
+    apt-get install --no-install-recommends -y \
     apache2 \
     apache2-utils \
     libapache2-mod-proxy-uwsgi \
     libxml2-dev \
-    libxslt-dev \
-    gcc \
-    && apt-get clean && \
+    libxslt-dev && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Set up work directory
 WORKDIR /app
 
-# Copy only requirements first to leverage Docker caching
-COPY requirements.txt /app/
+# Copy requirements.txt
+COPY requirements.txt /app/requirements.txt
 
-# Install dependencies with no cache to save space
+# Install dependencies (with no cache to reduce size)
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy your Python code into the Docker container
-COPY app.py /app
+COPY . /app
 
-# Copy the rest of the app files
-COPY . /app/
-
-# Expose necessary port for Streamlit
+# Expose port for Streamlit
 EXPOSE 2504
 
 # Set up the Apache proxy configurations
@@ -36,8 +32,42 @@ RUN echo "ProxyPass /team4s25 http://localhost:2504/team4s25" >> /etc/apache2/si
     echo "ProxyPassReverse /team4s25 http://localhost:2504/team4s25" >> /etc/apache2/sites-available/000-default.conf && \
     echo "RewriteRule /team4s25/(.*) ws://localhost:2504/team4s25/$1 [P,L]" >> /etc/apache2/sites-available/000-default.conf
 
-# Enable Apache modules for proxy support
+# Enable Apache modules for proxy and WebSocket support
 RUN a2enmod proxy proxy_http rewrite
 
-# Start Apache and Streamlit using `sh` in the CMD
+# Stage 2: Runtime stage (final image)
+FROM python:3.10-slim
+
+# Copy Python dependencies from build stage to runtime stage
+COPY --from=build /usr/local/lib/python3.10 /usr/local/lib/python3.10
+COPY --from=build /usr/local/bin /usr/local/bin
+
+# Copy only the necessary Apache configuration from the build stage
+COPY --from=build /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/000-default.conf
+
+# Install minimal runtime dependencies (Apache)
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    apache2-utils && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Ensure missing Python packages are installed in runtime
+RUN pip install --no-cache-dir \
+    streamlit \
+    requests \
+    pandas \
+    langchain-groq \
+    langchain \
+    python-dotenv \
+    scrapy \
+    beautifulsoup4 \
+    scikit-learn \
+    numpy
+
+# Expose port 2504 for Streamlit
+EXPOSE 2504
+
+# Start Apache and Streamlit
 CMD ["sh", "-c", "apache2ctl start & streamlit run app.py --server.port=2504 --server.baseUrlPath=/team4s25"]
