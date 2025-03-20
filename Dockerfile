@@ -11,6 +11,7 @@ RUN apt-get update && \
     libxslt-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir scikit-learn
 
 # Set up work directory
 WORKDIR /app
