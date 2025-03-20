@@ -43,3 +43,8 @@ CMD ["sh", "-c", "apache2ctl start & streamlit run app.py --server.port=2504 --s
 # Stage 2: Runtime stage (final image)
 FROM python:3.10-slim
 
+# Copy Python dependencies from build stage to runtime stage
+COPY --from=build /usr/local/lib/python3.10 /usr/local/lib/python3.10
+COPY --from=build /usr/local/bin /usr/local/bin
+
+
