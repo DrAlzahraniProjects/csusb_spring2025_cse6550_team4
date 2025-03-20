@@ -18,8 +18,8 @@ WORKDIR /app
 # Copy requirements.txt
 COPY requirements.txt /app/requirements.txt
 
-# Install Python dependencies from requirements.txt
-RUN pip install -r requirements.txt
+# Install dependencies (with no cache)
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy your Python code into the Docker container
 COPY . /app
