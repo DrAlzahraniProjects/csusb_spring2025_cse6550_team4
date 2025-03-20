@@ -53,6 +53,19 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 # Set working directory
 WORKDIR /app
 
+# Install missing Python packages (ensure they are available in runtime)
+RUN pip install --no-cache-dir \
+    streamlit \
+    requests \
+    pandas \
+    langchain-groq \
+    langchain \
+    python-dotenv \
+    scrapy \
+    beautifulsoup4 \
+    scikit-learn \
+    numpy
+
 # Expose port 2504 for Streamlit
 EXPOSE 2504
 
