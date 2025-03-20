@@ -52,3 +52,6 @@ COPY --from=build /usr/local/bin /usr/local/bin
 RUN apt-get update && apt-get install --no-install-recommends -y \
     apache2-utils && \
     rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
