@@ -48,3 +48,7 @@ COPY --from=build /usr/local/lib/python3.10 /usr/local/lib/python3.10
 COPY --from=build /usr/local/bin /usr/local/bin
 
 
+# Install runtime dependencies (Apache)
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    apache2-utils && \
+    rm -rf /var/lib/apt/lists/*
