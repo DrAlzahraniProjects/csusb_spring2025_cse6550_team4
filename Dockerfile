@@ -12,10 +12,10 @@ RUN apt-get update && \
     apt-get clean
 
 
-# Set up the work directory
+# Set up work directory
 WORKDIR /app
 
-# Copy your requirements.txt into the Docker container
+# Copy requirements.txt
 COPY requirements.txt /app/requirements.txt
 
 # Install Python dependencies from requirements.txt
