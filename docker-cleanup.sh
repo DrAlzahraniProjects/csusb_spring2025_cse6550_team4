@@ -1,6 +1,8 @@
 #!/bin/bash
 
 APP_NAME="team4s25-app"
+PORT=2504
+
 
 # Check and stop running containers
 RUNNING_CONTAINERS=$(docker ps -q --filter "name=$APP_NAME")
@@ -28,5 +30,17 @@ if [ -n "$IMAGES" ]; then
 else
     echo "No image found for $APP_NAME."
 fi
+
+# Check and release port if occupied
+echo "Checking if port $PORT is in use..."
+PORT_PID=$(lsof -ti:$PORT)
+if [ -n "$PORT_PID" ]; then
+    echo "Port $PORT is in use by process $PORT_PID. Killing process..."
+    kill -9 $PORT_PID
+    echo "Process killed. Port $PORT released."
+else
+    echo "Port $PORT is not in use."
+fi
+
 
 echo "Cleanup completed."
