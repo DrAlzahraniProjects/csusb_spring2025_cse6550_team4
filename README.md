@@ -51,7 +51,7 @@ chmod +x docker-launch.sh
 
 For Streamlit:
 
-- Once the container starts, Open browser at http://localhost:2504/team4s25.
+- Once the container starts, Open browser at http://localhost:2594/team4s25.
 
 ### Step 7: Enable execute permissions for the Docker cleanup script:
 
