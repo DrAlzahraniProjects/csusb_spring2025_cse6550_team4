@@ -13,6 +13,9 @@ RUN apt-get update && \
     libxml2-dev \
     libxslt-dev \
     gcc \
+    apache2 \
+    apache2-utils \
+    libapache2-mod-proxy-uwsgi \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -26,7 +29,13 @@ COPY app.py /app
 COPY . /app/
 
 # Expose necessary port for Streamlit
-EXPOSE 2594
+EXPOSE 2504
 
-# Start Streamlit using the new port
-CMD ["streamlit", "run", "app.py", "--server.port=2594", "--server.baseUrlPath=/team4s25"]
+# Configure Apache for ProxyPass and WebSockets
+RUN echo "ProxyPass /team4s25 http://localhost:2504/team4s25" >> /etc/apache2/sites-available/000-default.conf \
+    && echo "ProxyPassReverse /team4s25 http://localhost:2504/team4s25" >> /etc/apache2/sites-available/000-default.conf \
+    && echo "RewriteRule /team4s25/(.*) ws://localhost:2504/team4s25/$1 [P,L]" >> /etc/apache2/sites-available/000-default.conf \
+    && a2enmod proxy proxy_http rewrite proxy_wstunnel
+
+# Start Apache and Streamlit
+CMD apachectl start && streamlit run app.py --server.port=2504 --server.baseUrlPath=/team4s25
