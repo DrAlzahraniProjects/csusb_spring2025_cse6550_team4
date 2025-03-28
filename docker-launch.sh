@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Sets Container Name and Ports
-CONT_NAME="team4s25-app1"
-PORT_NUM=2594
+CONT_NAME="team4s25-app"
+PORT_NUM=2504
 
 # Run cleanup script before building a new image
 ./docker-cleanup.sh

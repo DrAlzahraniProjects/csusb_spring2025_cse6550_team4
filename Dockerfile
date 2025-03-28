@@ -26,7 +26,7 @@ COPY app.py /app
 COPY . /app/
 
 # Expose necessary port for Streamlit
-EXPOSE 2594
+EXPOSE 2504
 
 # Start Streamlit using the new port
-CMD ["streamlit", "run", "app.py", "--server.port=2594", "--server.baseUrlPath=/team4s25"]
+CMD ["streamlit", "run", "app.py", "--server.port=2504", "--server.baseUrlPath=/team4s25"]
