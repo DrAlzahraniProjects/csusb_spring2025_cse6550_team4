@@ -1,6 +1,6 @@
 #!/bin/bash
 
-APP_NAME="team4s25-app"
+APP_NAME="team4s25-app1"
 
 
 # Check and stop running containers
