@@ -12,6 +12,8 @@ RUN apt-get update && \
     apt-get install -y \
     libxml2-dev \
     libxslt-dev \
+    libffi-dev \
+    build-essential \
     gcc \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
