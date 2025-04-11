@@ -106,71 +106,6 @@ FALLBACK_DATA = [
     {"url": "https://www.csusb.edu/recreation-wellness", "title": "CSUSB Recreation and Wellness Center - Lockers", "content_type": "text", "text": "Day-use lockers are free with your own lock. Long-term rental lockers are available for a quarterly fee."}
 ]
 
-# === Guided Task Definition & Advice Logic ===
-guided_task_questions = [
-    "What is your primary fitness goal? (e.g., weight loss, muscle gain, general health)",
-    "How many days per week can you realistically commit to visiting?",
-    "Are you interested in group fitness classes? (Yes/No/Maybe)",
-    "Any specific areas you'd like to focus on? (e.g., cardio, strength, flexibility, swimming)"
-]
-
-def generate_guided_task_advice(results):
-    """Generates personalized advice based on guided task answers."""
-    advice = ["### Personalized Suggestions:\n"]
-    # Creates a dictionary mapping question to answer
-    answers = {item['question']: item['answer'].lower() for item in results}
-
-    # Extract answers safely using .get()
-    goal = answers.get(guided_task_questions[0], "")
-    days_str = answers.get(guided_task_questions[1], "") # Keep as string initially
-    group_interest = answers.get(guided_task_questions[2], "")
-    focus = answers.get(guided_task_questions[3], "")
-
-    # --- Goal-based advice ---
-    if "weight loss" in goal or "cardio" in focus:
-        advice.append("- **Cardio:** Utilize treadmills, ellipticals, bikes, track, pool.")
-    if "muscle gain" in goal or "strength" in focus:
-        advice.append("- **Strength:** Explore weight room. Consider strength classes.")
-    if "general health" in goal or not goal: # Catches general or empty goal
-        advice.append("- **Balanced:** Mix cardio, strength, flexibility!")
-    if "flexibility" in focus:
-        advice.append("- **Flexibility:** Use stretching areas. Consider Yoga/Pilates.")
-    if "swimming" in focus:
-        advice.append("- **Swimming:** Check pool schedule.")
-
-    # --- Frequency advice (simple example) ---
-    try:
-        # Extract numbers from the 'days' answer string
-        num_days = int(''.join(filter(str.isdigit, days_str)))
-        if num_days >= 3:
-            advice.append(f"- **Consistency ({num_days}/wk):** Great! Add rest & variety.")
-        elif num_days > 0:
-            advice.append(f"- **Making it Count ({num_days}/wk):** Focus on efficiency.")
-        else: # Handle cases where 0 or non-numeric input might occur after filtering
-             advice.append("- **Frequency:** Plan visits according to your schedule.")
-    except ValueError: # Catches errors if no digits found or conversion fails
-        advice.append("- **Frequency:** Plan visits according to your schedule.")
-
-    # --- Group Fitness Advice with Schedule ---
-    if "yes" in group_interest or "maybe" in group_interest:
-        advice.append("- **Group Fitness:** Check Schedule on the RecWell website.")
-         
-    # --- Mobile App Links ---
-    advice.append("- **Mobile App:** Download from [Google Play Store](https://play.google.com/store/apps/details?id=com.innosoftfusiongo.csusanbernardino) or [Apple App Store](https://apps.apple.com/us/app/csusb-recreation-and-wellness/id1558202425).")
-    
-    # --- Hours of operation link ---
-    advice.append("- **RecWell Hours:** Check the [hours of operation](https://www.csusb.edu/recreation-wellness/about-us/hours).")
-        
-    # --- Individual preference advice ---
-    if "no" in group_interest:
-        advice.append("- **Individual:** Use gym floor, pool, track, courts.")
-
-    # --- Fallback if minimal specific advice was generated ---
-    if len(advice) <= 3: # If only title + freq advice + app links
-        advice.append("- Explore [RecWell website](https://www.csusb.edu/recreation-wellness) or front desk for more info!")
-
-    return "\n".join(advice)
-
 # === Helper Functions ===
 def normalize_text(text):
     if not isinstance(text, str): text = str(text)
@@ -535,10 +470,6 @@ default_session_state = {
     "auto_dialogue_results": [],
     "scraped_questions": [],
     "GROQ_API_KEY": api_key or "",
-    "guided_task_active": False,
-    "guided_task_step": 0,
-    "guided_task_results": [],
-    "guided_task_current_answer": ""
 }
 for key, value in default_session_state.items():
     if key not in st.session_state:
@@ -817,60 +748,6 @@ with st.sidebar:
                 st.rerun()
         else:
             st.rerun()  # Rerun for next step
-    
-    st.divider()
-    
-    # Guided Task section in sidebar
-    st.subheader("🚀 Guided Start")
-    st.write("Answer questions for personalized suggestions")
-    
-    # Use guided_task state variables
-    is_guided_task_active = st.session_state.get("guided_task_active", False)
-    guided_task_step = st.session_state.get("guided_task_step", 0)
-
-    if not is_guided_task_active:
-        # Button to start the task
-        if st.button("Begin Guided Start", key="start_guided_task_sidebar"):
-            st.session_state.guided_task_active = True
-            st.session_state.guided_task_step = 0
-            st.session_state.guided_task_results = []
-            st.rerun() # Rerun to show the first question
-    else:
-        # Display questions if the task is active and not finished
-        if guided_task_step < len(guided_task_questions):
-            question = guided_task_questions[guided_task_step]
-            st.markdown(f"**Question {guided_task_step + 1}/{len(guided_task_questions)}:** {question}")
-
-            # Input for the answer
-            dialogue_answer = st.text_input("Your Answer:", key=f"guided_answer_{guided_task_step}", placeholder="Type answer...")
-
-            # Buttons side-by-side
-            col1_gt, col2_gt = st.columns([1, 1])
-            with col1_gt:
-                if st.button("Submit", key=f"submit_guided_{guided_task_step}"):
-                    if dialogue_answer: # Check if answer is provided
-                        st.session_state.guided_task_results.append({"question": question, "answer": dialogue_answer})
-                        st.session_state.guided_task_step += 1 # Move to next step
-                        st.rerun() # Rerun to display next question or results
-                    else:
-                        st.warning("Please enter an answer.")
-            with col2_gt:
-                # Button to cancel the task mid-way
-                if st.button("Cancel", key=f"cancel_guided_{guided_task_step}"):
-                    st.session_state.guided_task_active = False
-                    st.session_state.guided_task_results = [] # Clear partial results
-                    st.rerun() # Rerun to show the start button again
-        else:
-            # --- Guided Task Finished ---
-            st.success("🎉 Guided Start Completed!")
-            # Generate and display advice
-            advice = generate_guided_task_advice(st.session_state.guided_task_results)
-            st.markdown(advice, unsafe_allow_html=True)
-            # Button to reset/restart the guided task
-            if st.button("Reset Guided Start", key="reset_guided_task"):
-                st.session_state.guided_task_active = False
-                st.session_state.guided_task_results = []
-                st.rerun() # Rerun to show the start button again
 
     # Clear Chat History button in sidebar
     st.divider()
