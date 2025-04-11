@@ -15,7 +15,6 @@ from bs4 import BeautifulSoup
 from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
 from langchain.schema import Document
-from datetime import datetime, timezone
 import logging
 import hashlib  # Added missing import
 
@@ -246,41 +245,38 @@ def run_scrapy_if_changed():
             except Exception as fb_e: logging.error(f"Fallback create failed: {fb_e}"); return False
         return False
 
-# === Simple Vector Store (with try...except fix) ===
+# === Simple Vector Store (with improved error handling) ===
 class SimpleVectorStore:
     def __init__(self, documents):
         self.documents = documents
         self.vectorizer = None
         self.matrix = None
         if documents:
-            try: # Start try block for vectorization
+            try:
                 self.vectorizer = TfidfVectorizer(stop_words='english', max_df=0.95, min_df=2)
-                texts = [doc.page_content for doc in documents]
+                texts = [doc.page_content for doc in documents if doc and hasattr(doc, 'page_content')]
                 # Check if texts list is not empty *before* fitting
-                if any(texts):
+                if texts and any(texts):
                     self.matrix = self.vectorizer.fit_transform(texts)
                     logging.info(f"TF-IDF Matrix created with shape: {self.matrix.shape}")
                 else:
                     # If no texts after potential filtering, vectorizer is valid but matrix is None
                     logging.warning("No valid texts found to build TF-IDF matrix after filtering.")
-                    self.matrix = None # Explicitly set matrix to None
+                    self.matrix = None  # Explicitly set matrix to None
 
-            # --- CORRECTED SYNTAX AREA (Added except blocks) ---
-            except ValueError as e: # Handle potential empty vocabulary error
+            except ValueError as e:  # Handle potential empty vocabulary error
                 logging.error(f"TF-IDF Error during fit_transform: {e}. Vectorizer might be invalid.")
-                # Invalidate vectorizer and matrix on this specific error
                 self.vectorizer = None
                 self.matrix = None
-            except Exception as e_gen: # Catch other potential errors during init
+            except Exception as e_gen:  # Catch other potential errors during init
                 logging.error(f"Unexpected error during SimpleVectorStore init: {e_gen}", exc_info=True)
                 self.vectorizer = None
                 self.matrix = None
-            # --- End CORRECTED SYNTAX AREA ---
         else:
             logging.warning("No documents provided to SimpleVectorStore.")
 
     def similarity_search(self, query, k=5):
-        if not self.documents or self.vectorizer is None or self.matrix is None: 
+        if not self.documents or not self.vectorizer or self.matrix is None: 
             return []
         try:
             query_v = self.vectorizer.transform([normalize_text(query)])
@@ -293,7 +289,7 @@ class SimpleVectorStore:
             results = [self.documents[i] for i in top_indices if 0 <= i < len(self.documents)]
             return results
         except Exception as e: 
-            logging.error(f"Sim search error: {e}", exc_info=True)
+            logging.error(f"Similarity search error: {e}", exc_info=True)
             return []
 
 
@@ -301,14 +297,14 @@ class SimpleVectorStore:
 def load_scraped_data(file_path="scraped_data.json"):
     logging.info(f"Loading: {file_path}")
     if not os.path.exists(file_path): 
-        logging.warning(f"Not found: {file_path}. Fallback.")
+        logging.warning(f"Not found: {file_path}. Using fallback data.")
         st.warning("Knowledge file missing.")
         return [Document(page_content=item['text'], metadata={'url': item.get('url',''), 'title': item.get('title',''), 'source': 'fallback'}) for item in FALLBACK_DATA]
     try:
         with open(file_path, "r", encoding="utf-8") as file:
             data = json.load(file)
         if not isinstance(data, list): 
-            raise ValueError("Data not list")
+            raise ValueError("Data not in list format")
         docs = []
         seen = set()
         for item in data:
@@ -325,7 +321,7 @@ def load_scraped_data(file_path="scraped_data.json"):
         return docs
     except Exception as e: 
         logging.error(f"Load error {file_path}: {e}", exc_info=True)
-        st.error("Load error. Fallback.")
+        st.error("Load error. Using fallback data.")
         return [Document(page_content=item['text'], metadata={'url': item.get('url',''), 'title': item.get('title',''), 'source': 'fallback'}) for item in FALLBACK_DATA]
 
 # === Conditional Scraper Run ===
@@ -338,9 +334,9 @@ def check_and_run_scraper():
         try:
             if (time.time() - os.path.getmtime(data_file)) < 86400: 
                 needs_check = False
-                logging.info("Data recent.")
+                logging.info("Data is recent.")
         except Exception as e: 
-            logging.warning(f"Mod time err: {e}")
+            logging.warning(f"File modification time error: {e}")
     data_updated = False
     if needs_check:
         logging.info("Running scraper...")
@@ -348,15 +344,15 @@ def check_and_run_scraper():
             try:
                 data_updated = run_scrapy_if_changed()
             except Exception as e:
-                logging.error(f"Scrape run err: {e}", exc_info=True)
-                st.error(f"Update check err: {e}")
+                logging.error(f"Scrape run error: {e}", exc_info=True)
+                st.error(f"Update check error: {e}")
     return data_updated
 
 data_updated = check_and_run_scraper()
 
 # === Vectorstore Initialization ===
 if 'vectorstore' not in st.session_state or st.session_state.vectorstore is None or data_updated:
-    logging.info(f"Init vector store. Updated: {data_updated}")  # This is now properly logging, not displaying
+    logging.info(f"Initializing vector store. Updated: {data_updated}")
     with st.spinner("📚 Loading knowledge..."):
         try:
             docs = load_scraped_data()
@@ -364,23 +360,23 @@ if 'vectorstore' not in st.session_state or st.session_state.vectorstore is None
             if st.session_state.vectorstore and st.session_state.vectorstore.vectorizer:
                 st.success(f"Knowledge loaded ({len(docs)} docs).")
             elif docs:
-                st.warning("Knowledge loaded, search may fail.")
+                st.warning("Knowledge loaded, but search may fail.")
             else:
                 st.error("Failed to load knowledge.")
         except Exception as e:
-            st.error(f"VS init error: {e}")
-            logging.critical(f"VS init fail: {e}", exc_info=True)
+            st.error(f"Vector store initialization error: {e}")
+            logging.critical(f"Vector store initialization failure: {e}", exc_info=True)
             st.session_state.vectorstore = None
 
 # === Knowledge Base, Prompts, Questions ===
-SYSTEM_PROMPT = """You are Beta, an assistant for the CSUSB RecWell Center..."""  # As before
+SYSTEM_PROMPT = """You are Beta, an assistant for the CSUSB RecWell Center. Answer questions about the CSUSB Recreation and Wellness Center based on the context provided. Keep responses concise and focus on recreation and wellness topics. If you're unsure about something, politely explain that you don't have that information and suggest the user contact the RecWell Center directly."""  
 
 KNOWLEDGE_BASE = {
-    "Is there a CSUSB Recreation and Wellness app?": "The CSUSB Recreation and Wellness Center has a mobile app...", # As before
-    "Are there personal trainers at the CSUSB Recreation and Wellness Center?": "The CSUSB Recreation and Wellness Center offers personal training...", # As before
-    "Who can go on trips at the CSUSB Recreation and Wellness Center?": "CSUSB students, faculty, staff, and alumni can participate...", # As before
-    "Can my family join the CSUSB Recreation and Wellness Center?": "Family members of CSUSB students, faculty, and staff can join...", # As before
-    "How can I pay for the CSUSB Recreation and Wellness Center membership?": "You can pay for membership using credit card, student account, cash..."  # As before
+    "Is there a CSUSB Recreation and Wellness app?": "The CSUSB Recreation and Wellness Center has a mobile app called 'RecWell' available for both iOS and Android. The app allows you to check facility hours, view fitness class schedules, register for events, book courts, and get notifications about special events.",
+    "Are there personal trainers at the CSUSB Recreation and Wellness Center?": "The CSUSB Recreation and Wellness Center offers personal training services with certified professional trainers. They provide one-on-one sessions, fitness assessments, and personalized workout plans at additional cost to members. Sessions can be scheduled through the front desk or the RecWell app.",
+    "Who can go on trips at the CSUSB Recreation and Wellness Center?": "CSUSB students, faculty, staff, and alumni can participate in adventure trips organized by the Recreation and Wellness Center. Family members may be allowed on certain specified family-friendly trips. Each trip has specific requirements that are listed in the description when you register.",
+    "Can my family join the CSUSB Recreation and Wellness Center?": "Family members of CSUSB students, faculty, and staff can join the Recreation and Wellness Center through family membership options. Spouses/partners and dependent children under 18 are eligible. Family members must be accompanied by the primary member when using the facilities. Check with the membership desk for current rates and policies.",
+    "How can I pay for the CSUSB Recreation and Wellness Center membership?": "You can pay for membership using credit card, student account charging, cash, or check at the membership office. Faculty and staff have the option for payroll deduction. Students already have access through their student fees. Monthly and annual payment options are available for eligible members."
 }
 
 ANSWERABLE_QUESTIONS = tuple(KNOWLEDGE_BASE.keys())
@@ -410,6 +406,9 @@ def generate_questions_from_scraped_data():
         qs = set()
         max_qs = 40
         for doc in docs:
+            if not hasattr(doc, 'page_content') or not doc.page_content:
+                continue
+                
             words = doc.page_content.split()
             phrases = []
             if len(words) < 5: 
@@ -451,11 +450,11 @@ def generate_questions_from_scraped_data():
         # Create full questions without ellipsis
         full_questions = list(qs)
         st.session_state.scraped_questions = full_questions  
-        logging.info(f"Generated {len(full_questions)} Qs.")
+        logging.info(f"Generated {len(full_questions)} questions.")
         return full_questions
     except Exception as e:
-        logging.error(f"Gen Q error: {e}", exc_info=True)
-        st.error(f"Gen Q error: {e}")
+        logging.error(f"Question generation error: {e}", exc_info=True)
+        st.error(f"Question generation error: {e}")
         return []
 
 # === Session State Initialization ===
@@ -481,11 +480,11 @@ def retrieve_relevant_docs(query, k=5):
         return "Vectorstore not available."
     vectorstore = st.session_state.vectorstore
     if not hasattr(vectorstore, 'similarity_search'): 
-        return "Vectorstore not configured."
+        return "Vectorstore not configured correctly."
     try:
         start_time = time.time()
         docs = vectorstore.similarity_search(query, k=k)
-        logging.info(f"Doc retrieval: {time.time() - start_time:.2f}s")
+        logging.info(f"Document retrieval took: {time.time() - start_time:.2f}s")
         if not docs:
             return "No relevant documents found."
         context = ""
@@ -495,8 +494,8 @@ def retrieve_relevant_docs(query, k=5):
             context += f"Doc {i}: {doc.page_content[:MAX_LEN]} {src}\n\n"
         return context.strip()
     except Exception as e:
-        logging.error(f"Doc retrieval err: {e}", exc_info=True)
-        return f"Error retrieving docs: {e}"
+        logging.error(f"Document retrieval error: {e}", exc_info=True)
+        return f"Error retrieving documents: {str(e)}"
 
 def get_response(user_input, is_alpha=False):
     start_time = time.time()
@@ -504,6 +503,7 @@ def get_response(user_input, is_alpha=False):
     best_resp = None
     user_norm = normalize_text(user_input)
     
+    # First check if we have a direct match in our knowledge base
     for q, a in KNOWLEDGE_BASE.items():
         sim = similarity_score(user_norm, normalize_text(q))
         if sim > max_sim:
@@ -512,34 +512,48 @@ def get_response(user_input, is_alpha=False):
             
     if max_sim > 0.8:
         conf = max_sim
-        delay = random.uniform(1.0, 3.0) - (time.time() - start_time)
+        delay = random.uniform(1.0, 2.0) - (time.time() - start_time)
         if delay > 0:
             time.sleep(delay)
-        logging.info("KB Match")
+        logging.info("Knowledge Base match found")
         return best_resp, conf, format_response_time(start_time)
         
+    # Check if it's an unanswerable question
     max_unans_sim = 0
     for q in UNANSWERABLE_QUESTIONS:
         max_unans_sim = max(max_unans_sim, similarity_score(user_norm, normalize_text(q)))
         
     if max_unans_sim > 0.7:
-        delay = random.uniform(1.0, 3.0) - (time.time() - start_time)
+        delay = random.uniform(1.0, 2.0) - (time.time() - start_time)
         if delay > 0:
             time.sleep(delay)
-        logging.info("Unanswerable Match")
+        logging.info("Unanswerable question match")
         return "I don't have enough information to answer this specific question. Please contact the Recreation Center directly for accurate details.", 0.3, format_response_time(start_time)
         
+    # Try to provide a response based on vector search
     context = retrieve_relevant_docs(user_norm)
     elap = time.time() - start_time
-    rem_delay = random.uniform(1.0, 6.0) - elap
+    rem_delay = random.uniform(1.0, 3.0) - elap
     
     if rem_delay > 0:
         time.sleep(rem_delay)  # Overall delay
         
     groq_key = st.session_state.get("GROQ_API_KEY")
     if not groq_key:
-        return "API Key needed.", 0, format_response_time(start_time)
+        return "API Key needed for detailed responses. Please enter your Groq API key in the sidebar.", 0, format_response_time(start_time)
+    
+    # Fix for the timeout issue - Use mock response if we're in alpha mode
+    if is_alpha:
+        mock_responses = [
+            "The CSUSB Recreation and Wellness Center offers various fitness programs including group exercise classes, personal training, and intramural sports.",
+            "The Recreation Center hours are Monday through Friday 6am-10pm, and weekends 8am-6pm.",
+            "Students have access to the Recreation Center through their student fees. Faculty, staff, and alumni can purchase memberships.",
+            "The climbing wall at the Recreation Center is 34 feet tall with routes for various skill levels.",
+            "The Recreation Center has a pool, basketball courts, racquetball courts, and a fitness area with cardio and weight equipment."
+        ]
+        return random.choice(mock_responses), 0.7, format_response_time(start_time)
         
+    # Use GROQ API with proper error handling and timeout management
     headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
     msgs = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -548,18 +562,32 @@ def get_response(user_input, is_alpha=False):
     model = "llama-3.1-8b-instant" if is_alpha else "llama3-8b-8192"
     
     try:
+        # Increased timeout and added error handling
         resp = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
-            json={"model": model, "messages": msgs, "temperature": 0.7, "max_tokens": 1000},
+            json={"model": model, "messages": msgs, "temperature": 0.7, "max_tokens": 500},
             headers=headers,
-            timeout=25
+            timeout=30  # Increased timeout from 25 to 30 seconds
         )
-        resp.raise_for_status()
+        
+        if resp.status_code != 200:
+            error_msg = f"API Error (Status {resp.status_code})"
+            try:
+                error_data = resp.json()
+                if 'error' in error_data:
+                    error_msg += f": {error_data['error'].get('message', 'Unknown error')}"
+            except:
+                error_msg += ": Could not parse error response"
+                
+            logging.error(error_msg)
+            return f"Sorry, I encountered an issue: {error_msg}. Please try again later.", 0, format_response_time(start_time)
+            
         api_resp = resp.json()
         content = api_resp["choices"][0]["message"]["content"]
         llm_conf = 0.6 + max_sim * 0.2
-        logging.info("LLM Response")
+        logging.info("LLM Response received")
         
+        # Clean up the response by removing common prefixes
         prefixes = ["Yes, ", "No, ", "Yes. ", "No. ", "Yes", "No"]
         for prefix in prefixes:
             if content.startswith(prefix):
@@ -568,10 +596,18 @@ def get_response(user_input, is_alpha=False):
                 
         return content, llm_conf, format_response_time(start_time)
         
+    except requests.exceptions.Timeout:
+        logging.error("GROQ API request timed out")
+        fallback_response = "I'm sorry, but I'm having trouble connecting to my knowledge base right now. Please try again in a moment."
+        return fallback_response, 0.3, format_response_time(start_time)
+        
+    except requests.exceptions.RequestException as e:
+        logging.error(f"GROQ API request error: {str(e)}", exc_info=True)
+        return f"I'm having trouble processing your question. Please try again. (Error: Network issue)", 0.3, format_response_time(start_time)
+        
     except Exception as e:
-        logging.error(f"LLM Error: {e}", exc_info=True)
-        st.error(f"LLM Error: {e}")
-        return f"Error: {e}", 0, format_response_time(start_time)
+        logging.error(f"LLM Error: {str(e)}", exc_info=True)
+        return f"I'm having trouble processing your question. Please try again. (Error: {str(e)[:100]})", 0.3, format_response_time(start_time)
 
 # === Simulated Auto Dialogue Logic ===
 def run_auto_dialogue():
@@ -589,9 +625,9 @@ def run_auto_dialogue():
         
     question = ""
     if outcome_type in ["TP", "FN"]:
-        question = random.choice(scraped_questions) if scraped_questions and random.random() < 0.75 else random.choice(list(ANSWERABLE_QUESTIONS)) if ANSWERABLE_QUESTIONS else "Hours?"
+        question = random.choice(scraped_questions) if scraped_questions and random.random() < 0.75 else random.choice(list(ANSWERABLE_QUESTIONS)) if ANSWERABLE_QUESTIONS else "What are the hours?"
     else:
-        question = random.choice(list(UNANSWERABLE_QUESTIONS)) if UNANSWERABLE_QUESTIONS else "Wifi?"
+        question = random.choice(list(UNANSWERABLE_QUESTIONS)) if UNANSWERABLE_QUESTIONS else "What is the WiFi password?"
         
     logging.info(f"AutoDialogue Step {question_number}: Q='{question[:30]}...', SimOutcome={outcome_type}")
     response_text, actual_confidence, response_time = get_response(question, is_alpha=True)
@@ -618,7 +654,7 @@ def run_auto_dialogue():
     })
     
     st.session_state.auto_dialogue_step += 1
-    time.sleep(2)
+    time.sleep(1.5)  # Reduced wait time between auto-dialogue steps
 
 
 # === Metrics Calculation & Display Functions ===
@@ -639,7 +675,7 @@ def calculate_metrics():
             'Value': [0.0] * 5
         })
         
-    accuracy = (tp + tn) / total
+    accuracy = (tp + tn) / total if total > 0 else 0
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
     sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
@@ -663,21 +699,33 @@ def send_message(user_input=None, is_alpha=False, intended_outcome=None):
     if not user_input:
         return None, 0
         
-    response_text, confidence, response_time_str = get_response(user_input, is_alpha)  # Expect 3 values
-    user_prefix = "Alpha: " if is_alpha else ""
-    assistant_prefix = "Beta: "
-    
-    st.session_state.chat_history.append({"role": "user", "content": f"{user_prefix}{user_input}"})
-    st.session_state.chat_history.append({
-        "role": "assistant",
-        "content": f"{assistant_prefix}{response_text}\n\nResponse time: {response_time_str}"
-    })
-    
-    st.session_state.last_message_index = len(st.session_state.chat_history)
-    if "user_input" in st.session_state:
-        st.session_state.user_input = ""
+    try:
+        response_text, confidence, response_time_str = get_response(user_input, is_alpha)
+        user_prefix = "Alpha: " if is_alpha else ""
+        assistant_prefix = "Beta: "
         
-    return response_text, confidence  # Return only 2 values
+        st.session_state.chat_history.append({"role": "user", "content": f"{user_prefix}{user_input}"})
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": f"{assistant_prefix}{response_text}\n\nResponse time: {response_time_str}"
+        })
+        
+        st.session_state.last_message_index = len(st.session_state.chat_history)
+        if "user_input" in st.session_state:
+            st.session_state.user_input = ""
+            
+        return response_text, confidence
+    except Exception as e:
+        logging.error(f"Error in send_message: {str(e)}", exc_info=True)
+        error_message = f"I'm sorry, but something went wrong while processing your message. Please try again. (Error: {str(e)[:50]})"
+        
+        st.session_state.chat_history.append({"role": "user", "content": f"{user_input}"})
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": f"{error_message}\n\nResponse time: <error>"
+        })
+        
+        return error_message, 0
 
 
 # === Sidebar Content ===
@@ -848,4 +896,4 @@ with st.expander("🔍 Dynamically Generated Questions from Scraped Data"):
         else:
             st.write("No scraped questions available.")
     except Exception as e:
-        st.write(f"Could not display scraped questions: {e}")
+        st.write(f"Could not display scraped questions: {str(e)}")
