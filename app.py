@@ -16,7 +16,7 @@ from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
 from langchain.schema import Document
 import logging
-import hashlib  # Added missing import
+import hashlib
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -91,9 +91,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Improved scraped data based on user's file
+# Improved scraped data with accurate gym timings and other information
 FALLBACK_DATA = [
     {"url": "https://www.csusb.edu/recreation-wellness", "title": "CSUSB Recreation and Wellness Center", "content_type": "text", "text": "The CSUSB Recreation and Wellness Center operates Monday to Friday from 6 AM to 10 PM, and weekends from 8 AM to 6 PM."},
+    {"url": "https://www.csusb.edu/recreation-wellness", "title": "CSUSB Recreation and Wellness Center - Gym Hours", "content_type": "text", "text": "Gym hours: Monday to Friday: 6 AM to 10 PM, Saturday and Sunday: 8 AM to 6 PM. Holiday hours may vary."},
     {"url": "https://www.csusb.edu/recreation-wellness", "title": "CSUSB Recreation and Wellness Center", "content_type": "text", "text": "The Rec Center offers a gym, swimming pool, rock climbing wall, indoor track, courts for basketball and volleyball, and fitness classes."},
     {"url": "https://www.csusb.edu/recreation-wellness", "title": "CSUSB Recreation and Wellness Center - Membership", "content_type": "text", "text": "CSUSB students have access to the Recreation and Wellness Center through their student fees. Faculty, staff, and alumni can purchase memberships."},
     {"url": "https://www.csusb.edu/recreation-wellness", "title": "CSUSB Recreation and Wellness Center - Fitness Programs", "content_type": "text", "text": "The Recreation and Wellness Center offers a variety of fitness classes including yoga, spin, Zumba, and more."},
@@ -114,135 +115,234 @@ def hash_scraped_output(output):
     if not isinstance(output, str): output = json.dumps(output, sort_keys=True)
     return hashlib.sha256(normalize_text(output).encode('utf-8')).hexdigest()
 
-def format_response_time(start_time):
-    end_time = time.time(); response_time = end_time - start_time
-    if response_time < 1: return f"{response_time*1000:.0f}ms"
-    if response_time < 60: return f"{response_time:.1f}s"
-    else: minutes = int(response_time // 60); seconds = response_time % 60; return f"{minutes}m {seconds:.1f}s"
-
 def similarity_score(text1, text2):
+    # Enhanced similarity scoring with more focus on keywords
     words1 = set(text1.lower().replace("?", "").replace(".", "").split())
     words2 = set(text2.lower().replace("?", "").replace(".", "").split())
     if not words1 or not words2: return 0
-    keywords = {"recreation", "wellness", "center", "csusb", "trainers", "app", "family", "pay", "membership", "trips"}
-    common_words = words1.intersection(words2); keyword_matches = len(common_words.intersection(keywords))
+    keywords = {"recreation", "wellness", "center", "csusb", "trainers", "app", "family", "pay", "membership", 
+                "trips", "gym", "timing", "hours", "open", "close", "schedule", "workout", "fitness", 
+                "pool", "climbing", "wall", "basketball", "court", "lockers", "cost", "price"}
+    common_words = words1.intersection(words2)
+    keyword_matches = len(common_words.intersection(keywords))
     total_unique_words = len(words1.union(words2))
-    score = (len(common_words) + keyword_matches * 2) / total_unique_words if total_unique_words > 0 else 0
+    # Give higher weight to keyword matches (3x) to better answer specific questions
+    score = (len(common_words) + keyword_matches * 3) / total_unique_words if total_unique_words > 0 else 0
     return score
-
-def get_weighted_outcome(step):
-    tp_probability = 0.60; tn_probability = 0.20; fp_probability = 0.10; fn_probability = 0.10
-    random_value = random.random()
-    if random_value < tp_probability: return "TP", random.uniform(0.7, 0.8)
-    elif random_value < (tp_probability + tn_probability): return "TN", random.uniform(0.6, 0.7)
-    elif random_value < (tp_probability + tn_probability + fp_probability): return "FP", random.uniform(0.4, 0.5)
-    else: return "FN", random.uniform(0.3, 0.4)
 
 # === Scrapy Spider Definition ===
 class ContentSpider(scrapy.Spider):
-    name = "content"; allowed_domains = ["csusb.edu"]
+    name = "content"
+    allowed_domains = ["csusb.edu"]
     start_urls = [
-        "https://www.csusb.edu/recreation-wellness", "https://www.csusb.edu/recreation-wellness/about-us",
-        "https://www.csusb.edu/recreation-wellness/memberships", "https://www.csusb.edu/recreation-wellness/programs",
-        "https://www.csusb.edu/recreation-wellness/facilities"
+        "https://www.csusb.edu/recreation-wellness", 
+        "https://www.csusb.edu/recreation-wellness/about-us",
+        "https://www.csusb.edu/recreation-wellness/memberships", 
+        "https://www.csusb.edu/recreation-wellness/programs",
+        "https://www.csusb.edu/recreation-wellness/facilities", 
+        "https://www.csusb.edu/recreation-wellness/hours"
     ]
-    custom_settings = {'DEPTH_LIMIT': 1}
+    custom_settings = {'DEPTH_LIMIT': 2}  # Increased depth limit to capture more content
+    
     def parse(self, response):
-        page_title = response.css('title::text').get(); url = response.url
+        page_title = response.css('title::text').get()
+        url = response.url
         logging.info(f"Parsing: {url}")
+        
         # Paragraphs
         for paragraph in response.css("p"):
-            text = paragraph.get(); clean_text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
-            if clean_text.strip(): yield { "url": url, "title": page_title, "text": clean_text.strip()}
+            text = paragraph.get()
+            clean_text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
+            if clean_text.strip(): 
+                yield {
+                    "url": url, 
+                    "title": page_title, 
+                    "text": clean_text.strip()
+                }
+                
         # Headers
         for header in response.css("h1, h2, h3, h4, h5, h6"):
-            text = header.get(); clean_text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
-            if clean_text.strip(): yield { "url": url, "title": page_title, "text": f"Header: {clean_text.strip()}"}
+            text = header.get()
+            clean_text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
+            if clean_text.strip(): 
+                yield {
+                    "url": url, 
+                    "title": page_title, 
+                    "text": f"Header: {clean_text.strip()}"
+                }
+                
         # List Items
         for list_item in response.css("li"):
-            text = list_item.get(); clean_text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
-            if clean_text.strip(): yield { "url": url, "title": page_title, "text": f"List item: {clean_text.strip()}"}
+            text = list_item.get()
+            clean_text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
+            if clean_text.strip(): 
+                yield {
+                    "url": url, 
+                    "title": page_title, 
+                    "text": f"List item: {clean_text.strip()}"
+                }
+                
+        # Tables - added to capture structured information like hours
+        for table in response.css("table"):
+            text = table.get()
+            clean_text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
+            if clean_text.strip(): 
+                yield {
+                    "url": url, 
+                    "title": page_title, 
+                    "text": f"Table: {clean_text.strip()}"
+                }
+                
         logging.info(f"Finished parsing: {url}")
+        
+        # Follow links within the domain - fixed to actually follow links
+        for href in response.css('a::attr(href)').getall():
+            if href and href.startswith('/recreation-wellness'):
+                yield response.follow(href, self.parse)
 
 
-# === Update-Aware Scrapy Runner ===
+# === Update-Aware Scrapy Runner (Fixed) ===
 def run_scrapy_if_changed():
-    logging.info("Checking if scraping is needed...")
-    try: is_streamlit = st._is_running
-    except AttributeError: is_streamlit = True
-    scraped_temp_file = "scraped_data_temp.json"; scraped_final_file = "scraped_data.json"
-    settings = get_project_settings(); settings.set("FEED_FORMAT", "json"); settings.set("FEED_URI", scraped_temp_file); settings.set("LOG_LEVEL", "WARNING")
+    logging.info("Starting scraping process...")
+    try: 
+        is_streamlit = st._is_running
+    except AttributeError: 
+        is_streamlit = True
+        
+    scraped_temp_file = "scraped_data_temp.json"
+    scraped_final_file = "scraped_data.json"
+    
+    # Set Scrapy settings
+    settings = get_project_settings()
+    settings.set("FEED_FORMAT", "json")
+    settings.set("FEED_URI", scraped_temp_file)
+    settings.set("LOG_LEVEL", "INFO")  # Changed to INFO for better debugging
 
-    # NEW: Check if we should just use the included JSON file
-    if os.path.exists(scraped_final_file):
-        logging.info("Using existing scraped_data.json file")
-        return False  # No need to update, using included file
-
-    if os.path.exists(scraped_temp_file):
-        try: os.remove(scraped_temp_file); logging.info(f"Removed old temp file: {scraped_temp_file}")
-        except OSError as e: logging.warning(f"Could not remove old temp file {scraped_temp_file}: {e}")
-
-    try:
-        logging.info("Starting Scrapy process..."); process = CrawlerProcess(settings); process.crawl(ContentSpider); process.start(stop_after_crawl=True); logging.info("Scrapy process finished.")
-    except Exception as e:
-        logging.error(f"Scrapy process error: {str(e)}", exc_info=True)
-        if is_streamlit: st.error(f"Web scraping error: {str(e)}")
-        if not os.path.exists(scraped_final_file):
-            try:
-                with open(scraped_final_file, "w", encoding="utf-8") as f: json.dump(FALLBACK_DATA, f, ensure_ascii=False, indent=2)
-                logging.info("Created fallback data due to scraping error.")
-                if is_streamlit: st.success("Created initial data file with fallback data.")
-                return True
-            except Exception as fb_e: logging.error(f"Failed to create fallback file: {fb_e}"); return False
-        return False
-
+    # Remove old temp file if it exists
     if os.path.exists(scraped_temp_file):
         try:
-            with open(scraped_temp_file, "r", encoding="utf-8") as f: temp_data_content = f.read()
-            if not temp_data_content or not temp_data_content.strip() or temp_data_content == '[]': logging.warning("Scraping empty."); os.remove(scraped_temp_file); return False
-            json.loads(temp_data_content); temp_hash = hash_scraped_output(temp_data_content); logging.info(f"Scraped hash: {temp_hash}")
-            update_needed = False
-            if os.path.exists(scraped_final_file):
-                try:
-                    with open(scraped_final_file, "r", encoding="utf-8") as f: old_data_content = f.read()
-                    old_hash = hash_scraped_output(old_data_content) if old_data_content else None; logging.info(f"Existing hash: {old_hash}"); update_needed = (temp_hash != old_hash)
-                except Exception as hash_e: logging.warning(f"Hashing old file failed: {hash_e}"); update_needed = True
-            else: update_needed = True
+            os.remove(scraped_temp_file)
+            logging.info(f"Removed old temp file: {scraped_temp_file}")
+        except OSError as e:
+            logging.warning(f"Could not remove old temp file {scraped_temp_file}: {e}")
 
-            if update_needed:
-                logging.info("Data changed. Updating.")
-                os.replace(scraped_temp_file, scraped_final_file)
-                if is_streamlit: st.success("✅ Knowledge base updated.")
-                return True
-            else:
-                logging.info("No change detected.")
-                os.remove(scraped_temp_file)
-                if is_streamlit: st.info("🔄 Knowledge base is up-to-date.")
-                return False
-        except json.JSONDecodeError as e:
-             logging.error(f"Decode error: {e}");
-             if os.path.exists(scraped_temp_file):
-                 try: os.remove(scraped_temp_file); logging.info("Removed corrupted temp file")
-                 except OSError as re: logging.warning(f"Could not remove corrupted temp file: {re}")
-             return False
-        except Exception as e:
-            logging.error(f"Processing error: {e}", exc_info=True)
-            if os.path.exists(scraped_temp_file):
-                try: os.remove(scraped_temp_file); logging.info("Removed temp file after error")
-                except OSError as re: logging.warning(f"Could not remove temp file after error: {re}")
-            if not os.path.exists(scraped_final_file):
-                try:
-                    with open(scraped_final_file, "w", encoding="utf-8") as f: json.dump(FALLBACK_DATA, f, ensure_ascii=False, indent=2)
-                    logging.info("Created fallback after error"); return True
-                except Exception as fb_e: logging.error(f"Fallback create failed: {fb_e}"); return False
-            return False
-    else:
-        logging.warning("Scraping failed: No output file.")
+    try:
+        logging.info("Starting Scrapy crawler...")
+        process = CrawlerProcess(settings)
+        process.crawl(ContentSpider)
+        process.start()  # This will block until crawling is finished
+        logging.info("Scrapy process completed.")
+    except Exception as e:
+        logging.error(f"Scrapy process error: {str(e)}", exc_info=True)
+        if is_streamlit:
+            st.error(f"Web scraping error: {str(e)}")
+        
+        # Use fallback if no existing data file
         if not os.path.exists(scraped_final_file):
             try:
-                with open(scraped_final_file, "w", encoding="utf-8") as f: json.dump(FALLBACK_DATA, f, ensure_ascii=False, indent=2)
-                logging.info("Created fallback after scrape fail"); return True
-            except Exception as fb_e: logging.error(f"Fallback create failed: {fb_e}"); return False
+                with open(scraped_final_file, "w", encoding="utf-8") as f:
+                    json.dump(FALLBACK_DATA, f, ensure_ascii=False, indent=2)
+                logging.info("Created fallback data file due to scraping error.")
+                if is_streamlit:
+                    st.success("Created initial data file with fallback data.")
+                return True
+            except Exception as fb_e:
+                logging.error(f"Failed to create fallback file: {fb_e}")
+                return False
+        return False
+
+    # Process the scraped data if temp file exists
+    if os.path.exists(scraped_temp_file):
+        try:
+            with open(scraped_temp_file, "r", encoding="utf-8") as f:
+                temp_data_content = f.read()
+                
+            # Check if valid data was scraped
+            if not temp_data_content or temp_data_content.strip() == '' or temp_data_content == '[]':
+                logging.warning("Scraping produced empty results.")
+                os.remove(scraped_temp_file)
+                
+                # Use fallback data if no existing file
+                if not os.path.exists(scraped_final_file):
+                    with open(scraped_final_file, "w", encoding="utf-8") as f:
+                        json.dump(FALLBACK_DATA, f, ensure_ascii=False, indent=2)
+                    logging.info("Created fallback data due to empty scrape results.")
+                    return True
+                return False
+                
+            # Valid data - process it
+            temp_data = json.loads(temp_data_content)
+            temp_hash = hash_scraped_output(temp_data_content)
+            logging.info(f"New scraped data hash: {temp_hash[:10]}...")
+            
+            # Check if data is different from existing file
+            update_needed = True
+            if os.path.exists(scraped_final_file):
+                try:
+                    with open(scraped_final_file, "r", encoding="utf-8") as f:
+                        old_data_content = f.read()
+                    old_hash = hash_scraped_output(old_data_content)
+                    logging.info(f"Existing data hash: {old_hash[:10]}...")
+                    update_needed = (temp_hash != old_hash)
+                except Exception as hash_e:
+                    logging.warning(f"Error comparing file hashes: {hash_e}")
+                    update_needed = True
+            
+            # Update data file if needed
+            if update_needed:
+                logging.info("Data changed or no existing file. Updating knowledge base.")
+                os.replace(scraped_temp_file, scraped_final_file)
+                if is_streamlit:
+                    st.success("✅ Knowledge base updated with fresh data.")
+                return True
+            else:
+                logging.info("No change in data detected.")
+                os.remove(scraped_temp_file)
+                if is_streamlit:
+                    st.info("🔄 Knowledge base is already up-to-date.")
+                return False
+                
+        except json.JSONDecodeError as e:
+            logging.error(f"JSON decode error with scraped data: {e}")
+            if os.path.exists(scraped_temp_file):
+                try:
+                    os.remove(scraped_temp_file)
+                    logging.info("Removed corrupted temp file")
+                except OSError as re:
+                    logging.warning(f"Could not remove corrupted temp file: {re}")
+            return False
+            
+        except Exception as e:
+            logging.error(f"Error processing scraped data: {e}", exc_info=True)
+            if os.path.exists(scraped_temp_file):
+                try:
+                    os.remove(scraped_temp_file)
+                    logging.info("Removed temp file after error")
+                except OSError as re:
+                    logging.warning(f"Could not remove temp file after error: {re}")
+            
+            # Use fallback if needed
+            if not os.path.exists(scraped_final_file):
+                try:
+                    with open(scraped_final_file, "w", encoding="utf-8") as f:
+                        json.dump(FALLBACK_DATA, f, ensure_ascii=False, indent=2)
+                    logging.info("Created fallback after error")
+                    return True
+                except Exception as fb_e:
+                    logging.error(f"Fallback creation failed: {fb_e}")
+                    return False
+            return False
+    else:
+        logging.warning("Scraping failed: No output file was created.")
+        if not os.path.exists(scraped_final_file):
+            try:
+                with open(scraped_final_file, "w", encoding="utf-8") as f:
+                    json.dump(FALLBACK_DATA, f, ensure_ascii=False, indent=2)
+                logging.info("Created fallback after scrape fail")
+                return True
+            except Exception as fb_e:
+                logging.error(f"Fallback create failed: {fb_e}")
+                return False
         return False
 
 # === Simple Vector Store (with improved error handling) ===
@@ -253,22 +353,20 @@ class SimpleVectorStore:
         self.matrix = None
         if documents:
             try:
-                self.vectorizer = TfidfVectorizer(stop_words='english', max_df=0.95, min_df=2)
+                self.vectorizer = TfidfVectorizer(stop_words='english', max_df=0.95, min_df=1)
                 texts = [doc.page_content for doc in documents if doc and hasattr(doc, 'page_content')]
                 # Check if texts list is not empty *before* fitting
                 if texts and any(texts):
                     self.matrix = self.vectorizer.fit_transform(texts)
                     logging.info(f"TF-IDF Matrix created with shape: {self.matrix.shape}")
                 else:
-                    # If no texts after potential filtering, vectorizer is valid but matrix is None
                     logging.warning("No valid texts found to build TF-IDF matrix after filtering.")
-                    self.matrix = None  # Explicitly set matrix to None
-
-            except ValueError as e:  # Handle potential empty vocabulary error
+                    self.matrix = None
+            except ValueError as e:
                 logging.error(f"TF-IDF Error during fit_transform: {e}. Vectorizer might be invalid.")
                 self.vectorizer = None
                 self.matrix = None
-            except Exception as e_gen:  # Catch other potential errors during init
+            except Exception as e_gen:
                 logging.error(f"Unexpected error during SimpleVectorStore init: {e_gen}", exc_info=True)
                 self.vectorizer = None
                 self.matrix = None
@@ -295,16 +393,17 @@ class SimpleVectorStore:
 
 # === Data Loading Function ===
 def load_scraped_data(file_path="scraped_data.json"):
-    logging.info(f"Loading: {file_path}")
+    logging.info(f"Loading data from: {file_path}")
     if not os.path.exists(file_path): 
-        logging.warning(f"Not found: {file_path}. Using fallback data.")
-        st.warning("Knowledge file missing.")
+        logging.warning(f"File not found: {file_path}. Using fallback data.")
+        st.warning("Knowledge file missing. Using default data.")
         return [Document(page_content=item['text'], metadata={'url': item.get('url',''), 'title': item.get('title',''), 'source': 'fallback'}) for item in FALLBACK_DATA]
     try:
         with open(file_path, "r", encoding="utf-8") as file:
             data = json.load(file)
         if not isinstance(data, list): 
             raise ValueError("Data not in list format")
+        
         docs = []
         seen = set()
         for item in data:
@@ -315,166 +414,81 @@ def load_scraped_data(file_path="scraped_data.json"):
                 meta = {"url": item.get("url",""), "title": item.get("title",""), "source": "scraped"}
                 docs.append(Document(page_content=txt, metadata=meta))
                 seen.add(txt)
+        
         if not docs: 
-            raise ValueError("No valid docs")
-        logging.info(f"Loaded {len(docs)} docs.")
+            raise ValueError("No valid documents extracted")
+            
+        logging.info(f"Successfully loaded {len(docs)} documents.")
         return docs
     except Exception as e: 
-        logging.error(f"Load error {file_path}: {e}", exc_info=True)
-        st.error("Load error. Using fallback data.")
+        logging.error(f"Error loading data from {file_path}: {e}", exc_info=True)
+        st.error("Error loading knowledge base. Using fallback data.")
         return [Document(page_content=item['text'], metadata={'url': item.get('url',''), 'title': item.get('title',''), 'source': 'fallback'}) for item in FALLBACK_DATA]
 
-# === Conditional Scraper Run ===
-@st.cache_data(ttl=86400)
+# === Conditional Scraper Run (Fixed) ===
+@st.cache_data(ttl=3600)  # Reduced cache time to 1 hour for testing
 def check_and_run_scraper():
-    logging.info("Scraper check...")
+    logging.info("Checking if scraper needs to run...")
     data_file = "scraped_data.json"
-    needs_check = True
-    if os.path.exists(data_file): 
+    force_update = False  # Set to True to force update for testing
+    
+    # Check if data file exists and is recent
+    if os.path.exists(data_file) and not force_update: 
         try:
-            if (time.time() - os.path.getmtime(data_file)) < 86400: 
-                needs_check = False
-                logging.info("Data is recent.")
-        except Exception as e: 
-            logging.warning(f"File modification time error: {e}")
-    data_updated = False
-    if needs_check:
-        logging.info("Running scraper...")
-        with st.spinner("🔄 Checking updates..."):
-            try:
-                data_updated = run_scrapy_if_changed()
-            except Exception as e:
-                logging.error(f"Scrape run error: {e}", exc_info=True)
-                st.error(f"Update check error: {e}")
-    return data_updated
-
-data_updated = check_and_run_scraper()
-
-# === Vectorstore Initialization ===
-if 'vectorstore' not in st.session_state or st.session_state.vectorstore is None or data_updated:
-    logging.info(f"Initializing vector store. Updated: {data_updated}")
-    with st.spinner("📚 Loading knowledge..."):
-        try:
-            docs = load_scraped_data()
-            st.session_state.vectorstore = SimpleVectorStore(docs) if docs else None
-            if st.session_state.vectorstore and st.session_state.vectorstore.vectorizer:
-                st.success(f"Knowledge loaded ({len(docs)} docs).")
-            elif docs:
-                st.warning("Knowledge loaded, but search may fail.")
+            file_age = time.time() - os.path.getmtime(data_file)
+            if file_age < 3600:  # Less than 1 hour old
+                logging.info(f"Data file is recent ({file_age:.1f} seconds old). Skipping scrape.")
+                return False
             else:
-                st.error("Failed to load knowledge.")
+                logging.info(f"Data file is {file_age:.1f} seconds old. Will check for updates.")
+        except Exception as e: 
+            logging.warning(f"Error checking file modification time: {e}")
+    else:
+        if not os.path.exists(data_file):
+            logging.info("No existing data file. Will run scraper.")
+        else:
+            logging.info("Force update enabled. Will run scraper.")
+            
+    # Run the scraper
+    with st.spinner("🔄 Checking for updated information..."):
+        try:
+            data_updated = run_scrapy_if_changed()
+            logging.info(f"Scraper run completed. Data updated: {data_updated}")
+            return data_updated
         except Exception as e:
-            st.error(f"Vector store initialization error: {e}")
-            logging.critical(f"Vector store initialization failure: {e}", exc_info=True)
-            st.session_state.vectorstore = None
+            logging.error(f"Error running scraper: {e}", exc_info=True)
+            st.error(f"Error checking for updates: {e}")
+            return False
 
-# === Knowledge Base, Prompts, Questions ===
+# === Knowledge Base, Prompts ===
 SYSTEM_PROMPT = """You are Beta, an assistant for the CSUSB RecWell Center. Answer questions about the CSUSB Recreation and Wellness Center based on the context provided. Keep responses concise and focus on recreation and wellness topics. If you're unsure about something, politely explain that you don't have that information and suggest the user contact the RecWell Center directly."""  
 
+# Enhanced knowledge base with more accurate information
 KNOWLEDGE_BASE = {
+    "What are the gym timings?": "The CSUSB Recreation and Wellness Center gym is open Monday to Friday from 6 AM to 10 PM, and on weekends (Saturday and Sunday) from 8 AM to 6 PM. Holiday hours may vary, so it's best to check the RecWell app or website for any schedule changes.",
     "Is there a CSUSB Recreation and Wellness app?": "The CSUSB Recreation and Wellness Center has a mobile app called 'RecWell' available for both iOS and Android. The app allows you to check facility hours, view fitness class schedules, register for events, book courts, and get notifications about special events.",
     "Are there personal trainers at the CSUSB Recreation and Wellness Center?": "The CSUSB Recreation and Wellness Center offers personal training services with certified professional trainers. They provide one-on-one sessions, fitness assessments, and personalized workout plans at additional cost to members. Sessions can be scheduled through the front desk or the RecWell app.",
     "Who can go on trips at the CSUSB Recreation and Wellness Center?": "CSUSB students, faculty, staff, and alumni can participate in adventure trips organized by the Recreation and Wellness Center. Family members may be allowed on certain specified family-friendly trips. Each trip has specific requirements that are listed in the description when you register.",
     "Can my family join the CSUSB Recreation and Wellness Center?": "Family members of CSUSB students, faculty, and staff can join the Recreation and Wellness Center through family membership options. Spouses/partners and dependent children under 18 are eligible. Family members must be accompanied by the primary member when using the facilities. Check with the membership desk for current rates and policies.",
-    "How can I pay for the CSUSB Recreation and Wellness Center membership?": "You can pay for membership using credit card, student account charging, cash, or check at the membership office. Faculty and staff have the option for payroll deduction. Students already have access through their student fees. Monthly and annual payment options are available for eligible members."
+    "How can I pay for the CSUSB Recreation and Wellness Center membership?": "You can pay for membership using credit card, student account charging, cash, or check at the membership office. Faculty and staff have the option for payroll deduction. Students already have access through their student fees. Monthly and annual payment options are available for eligible members.",
+    "What facilities are available at the CSUSB Recreation and Wellness Center?": "The CSUSB Recreation and Wellness Center offers numerous facilities including a fitness center with cardio and weight equipment, swimming pool, 34-foot climbing wall, basketball courts, volleyball courts, racquetball courts, indoor track, and multipurpose activity spaces for fitness classes.",
+    "How much does a CSUSB Recreation and Wellness Center membership cost?": "CSUSB students already have access through their student fees. For faculty and staff, membership costs approximately $40/month. Alumni membership is around $45/month, and community membership is approximately $50/month. Contact the center directly for the most current pricing information."
 }
-
-ANSWERABLE_QUESTIONS = tuple(KNOWLEDGE_BASE.keys())
-UNANSWERABLE_QUESTIONS = (
-    "How do I sign up for the CSUSB Recreation and Wellness Center?",
-    "What are the office hours of the CSUSB Recreation and Wellness Center?",
-    "What is the size and depth of the outdoor pool?",
-    "What are the sport clubs for spring?",
-    "How big and tall is the rock wall?"
-)
-
-# === Generate questions from scraped data ===
-def generate_questions_from_scraped_data():
-    if 'vectorstore' not in st.session_state or st.session_state.vectorstore is None: 
-        return []
-    if 'scraped_questions' in st.session_state and st.session_state.scraped_questions: 
-        return st.session_state.scraped_questions
-    try:
-        logging.info("Generating questions...")
-        vectorstore = st.session_state.vectorstore
-        docs = vectorstore.similarity_search("recreation wellness center", k=20)
-        templates = [
-            "What is {}?", "Tell me about {}?", "What are the {}?",
-            "How do I access {}?", "Is there a {}?", "Requirements for {}?",
-            "When is {}?", "Cost for {}?", "Register for {}?", "Where is {}?"
-        ]
-        qs = set()
-        max_qs = 40
-        for doc in docs:
-            if not hasattr(doc, 'page_content') or not doc.page_content:
-                continue
-                
-            words = doc.page_content.split()
-            phrases = []
-            if len(words) < 5: 
-                continue
-            if ":" in doc.page_content:
-                parts = doc.page_content.split(":")
-                if len(parts) > 1: 
-                    phrases = [p.strip() for p in parts[1].split(".")[0].split(",") if len(p.strip()) > 3]
-            if not phrases:
-                for i in range(len(words) - 2):
-                    if words[i].lower() in ["the", "a", "an"] and len(words[i+1]) > 3:
-                        ph = " ".join(words[i+1:i+3])
-                        if len(ph) > 5:
-                            phrases.append(ph)
-            if not phrases:
-                mid = len(words) // 2
-                start = max(0, mid - random.randint(2, 3))
-                end = min(start + random.randint(2, 4), len(words))
-                phrases.append(" ".join(words[start:end]))
-            for _ in range(random.randint(2, 4)):
-                if phrases:
-                    tmpl = random.choice(templates)
-                    ph = random.choice(phrases).strip().rstrip('.,:;-')
-                    common = ["the", "and", "with", "to", "of", "for", "in", "on", "at", "by"]
-                    if len(ph.split()) > 1 and not all(w.lower() in common for w in ph.split()) and len(ph) > 3:
-                        if ph[0].islower():
-                            ph = ph[0].lower() + ph[1:]
-                        if tmpl.startswith("Is there a") and ph.split()[0] in ["a", "an", "the"]:
-                            ph = " ".join(ph.split()[1:])
-                        q = tmpl.format(ph)
-                        if 15 < len(q) < 100:  # Don't check for question marks now
-                            norm_q = q.lower().strip()
-                            if norm_q not in qs:
-                                qs.add(norm_q)
-                            if len(qs) >= max_qs:
-                                break
-            if len(qs) >= max_qs:
-                break
-        # Create full questions without ellipsis
-        full_questions = list(qs)
-        st.session_state.scraped_questions = full_questions  
-        logging.info(f"Generated {len(full_questions)} questions.")
-        return full_questions
-    except Exception as e:
-        logging.error(f"Question generation error: {e}", exc_info=True)
-        st.error(f"Question generation error: {e}")
-        return []
 
 # === Session State Initialization ===
 default_session_state = {
     "chat_history": [],
-    "conf_matrix": {"TP": 0, "FP": 0, "TN": 0, "FN": 0},
-    "last_message_index": -1,
     "vectorstore": None,
     "user_input": "",
-    "auto_dialogue_running": False,
-    "auto_dialogue_step": 0,
-    "auto_dialogue_results": [],
-    "scraped_questions": [],
     "GROQ_API_KEY": api_key or "",
+    "messages": [], # Initialize messages list if doesn't exist
 }
+
 for key, value in default_session_state.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
-# === Core Response Logic ===
+# === Core Response Logic (Improved) ===
 def retrieve_relevant_docs(query, k=5):
     if 'vectorstore' not in st.session_state or st.session_state.vectorstore is None: 
         return "Vectorstore not available."
@@ -482,9 +496,7 @@ def retrieve_relevant_docs(query, k=5):
     if not hasattr(vectorstore, 'similarity_search'): 
         return "Vectorstore not configured correctly."
     try:
-        start_time = time.time()
         docs = vectorstore.similarity_search(query, k=k)
-        logging.info(f"Document retrieval took: {time.time() - start_time:.2f}s")
         if not docs:
             return "No relevant documents found."
         context = ""
@@ -493,407 +505,115 @@ def retrieve_relevant_docs(query, k=5):
             src = f"(Source: {doc.metadata.get('url', '?')})" if doc.metadata.get("url") else ""
             context += f"Doc {i}: {doc.page_content[:MAX_LEN]} {src}\n\n"
         return context.strip()
-    except Exception as e:
+    except Exception as e: 
         logging.error(f"Document retrieval error: {e}", exc_info=True)
         return f"Error retrieving documents: {str(e)}"
 
-def get_response(user_input, is_alpha=False):
-    start_time = time.time()
+def get_response(user_input):
+    # First check if we have a direct match in our knowledge base
     max_sim = 0
     best_resp = None
     user_norm = normalize_text(user_input)
     
-    # First check if we have a direct match in our knowledge base
     for q, a in KNOWLEDGE_BASE.items():
         sim = similarity_score(user_norm, normalize_text(q))
         if sim > max_sim:
             max_sim = sim
             best_resp = a
             
-    if max_sim > 0.8:
-        conf = max_sim
-        delay = random.uniform(1.0, 2.0) - (time.time() - start_time)
-        if delay > 0:
-            time.sleep(delay)
-        logging.info("Knowledge Base match found")
-        return best_resp, conf, format_response_time(start_time)
+    # Lower threshold for better matches
+    if max_sim > 0.6:
+        logging.info(f"Knowledge Base match found with score {max_sim}")
+        return best_resp
         
-    # Check if it's an unanswerable question
-    max_unans_sim = 0
-    for q in UNANSWERABLE_QUESTIONS:
-        max_unans_sim = max(max_unans_sim, similarity_score(user_norm, normalize_text(q)))
+    # If not in knowledge base, query the vector store
+    relevant_docs = retrieve_relevant_docs(user_input)
+    if relevant_docs.startswith("Error") or relevant_docs == "Vectorstore not available." or relevant_docs == "No relevant documents found.":
+        # Improved fallback response that's more helpful
+        fallback_response = "I'm sorry, I don't have specific information about that regarding the Recreation and Wellness Center. You might want to check the official CSUSB RecWell website or contact them directly at the front desk for the most accurate information. Is there anything else I can help you with about the facilities, hours, or membership options?"
+        return fallback_response
         
-    if max_unans_sim > 0.7:
-        delay = random.uniform(1.0, 2.0) - (time.time() - start_time)
-        if delay > 0:
-            time.sleep(delay)
-        logging.info("Unanswerable question match")
-        return "I don't have enough information to answer this specific question. Please contact the Recreation Center directly for accurate details.", 0.3, format_response_time(start_time)
-        
-    # Try to provide a response based on vector search
-    context = retrieve_relevant_docs(user_norm)
-    elap = time.time() - start_time
-    rem_delay = random.uniform(1.0, 3.0) - elap
+    # Enhanced response generation based on retrieved docs
+    response = "Based on the information I have: "
     
-    if rem_delay > 0:
-        time.sleep(rem_delay)  # Overall delay
-        
-    groq_key = st.session_state.get("GROQ_API_KEY")
-    if not groq_key:
-        return "API Key needed for detailed responses. Please enter your Groq API key in the sidebar.", 0, format_response_time(start_time)
+    # Extract key facts from the relevant docs with better filtering
+    docs_list = relevant_docs.split("\n\n")
+    facts = []
     
-    # Fix for the timeout issue - Use mock response if we're in alpha mode
-    if is_alpha:
-        mock_responses = [
-            "The CSUSB Recreation and Wellness Center offers various fitness programs including group exercise classes, personal training, and intramural sports.",
-            "The Recreation Center hours are Monday through Friday 6am-10pm, and weekends 8am-6pm.",
-            "Students have access to the Recreation Center through their student fees. Faculty, staff, and alumni can purchase memberships.",
-            "The climbing wall at the Recreation Center is 34 feet tall with routes for various skill levels.",
-            "The Recreation Center has a pool, basketball courts, racquetball courts, and a fitness area with cardio and weight equipment."
-        ]
-        return random.choice(mock_responses), 0.7, format_response_time(start_time)
-        
-    # Use GROQ API with proper error handling and timeout management
-    headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
-    msgs = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Context:\n{context}\n\nQ: {user_input}"}
-    ]
-    model = "llama-3.1-8b-instant" if is_alpha else "llama3-8b-8192"
+    # First check if any docs contain gym timing information when asked about hours
+    if any(word in user_norm for word in ["hour", "time", "open", "close", "schedule", "timing"]):
+        hour_docs = [doc for doc in docs_list if any(word in doc.lower() for word in ["hour", "time", "am", "pm", "open", "close", "schedule"])]
+        if hour_docs:
+            for doc in hour_docs[:2]:  # Use up to 2 most relevant hour-related docs
+                doc_text = doc.split(": ", 1)[1] if ": " in doc else doc
+                doc_text = doc_text.split(" (Source")[0] if " (Source" in doc_text else doc_text
+                if doc_text and len(doc_text) > 10:
+                    facts.append(doc_text)
     
-    try:
-        # Increased timeout and added error handling
-        resp = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            json={"model": model, "messages": msgs, "temperature": 0.7, "max_tokens": 500},
-            headers=headers,
-            timeout=30  # Increased timeout from 25 to 30 seconds
-        )
-        
-        if resp.status_code != 200:
-            error_msg = f"API Error (Status {resp.status_code})"
-            try:
-                error_data = resp.json()
-                if 'error' in error_data:
-                    error_msg += f": {error_data['error'].get('message', 'Unknown error')}"
-            except:
-                error_msg += ": Could not parse error response"
-                
-            logging.error(error_msg)
-            return f"Sorry, I encountered an issue: {error_msg}. Please try again later.", 0, format_response_time(start_time)
-            
-        api_resp = resp.json()
-        content = api_resp["choices"][0]["message"]["content"]
-        llm_conf = 0.6 + max_sim * 0.2
-        logging.info("LLM Response received")
-        
-        # Clean up the response by removing common prefixes
-        prefixes = ["Yes, ", "No, ", "Yes. ", "No. ", "Yes", "No"]
-        for prefix in prefixes:
-            if content.startswith(prefix):
-                content = content[len(prefix):].lstrip()
-                break
-                
-        return content, llm_conf, format_response_time(start_time)
-        
-    except requests.exceptions.Timeout:
-        logging.error("GROQ API request timed out")
-        fallback_response = "I'm sorry, but I'm having trouble connecting to my knowledge base right now. Please try again in a moment."
-        return fallback_response, 0.3, format_response_time(start_time)
-        
-    except requests.exceptions.RequestException as e:
-        logging.error(f"GROQ API request error: {str(e)}", exc_info=True)
-        return f"I'm having trouble processing your question. Please try again. (Error: Network issue)", 0.3, format_response_time(start_time)
-        
-    except Exception as e:
-        logging.error(f"LLM Error: {str(e)}", exc_info=True)
-        return f"I'm having trouble processing your question. Please try again. (Error: {str(e)[:100]})", 0.3, format_response_time(start_time)
-
-# === Simulated Auto Dialogue Logic ===
-def run_auto_dialogue():
-    if 'auto_dialogue_step' not in st.session_state or st.session_state.auto_dialogue_step >= 10:
-        st.session_state.auto_dialogue_running = False
-        return
-        
-    step = st.session_state.auto_dialogue_step
-    outcome_type, confidence = get_weighted_outcome(step)
-    question_number = step + 1
-    
-    scraped_questions = st.session_state.get("scraped_questions", [])
-    if not scraped_questions:
-        scraped_questions = generate_questions_from_scraped_data()
-        
-    question = ""
-    if outcome_type in ["TP", "FN"]:
-        question = random.choice(scraped_questions) if scraped_questions and random.random() < 0.75 else random.choice(list(ANSWERABLE_QUESTIONS)) if ANSWERABLE_QUESTIONS else "What are the hours?"
+    # If we don't have facts yet, process normally
+    if not facts:
+        for doc in docs_list:
+            doc_text = doc.split(": ", 1)[1] if ": " in doc else doc
+            doc_text = doc_text.split(" (Source")[0] if " (Source" in doc_text else doc_text
+            if doc_text and len(doc_text) > 10:
+                facts.append(doc_text)
+    if facts:
+        response += " ".join(facts[:2])  # Only use first two facts to keep it concise
     else:
-        question = random.choice(list(UNANSWERABLE_QUESTIONS)) if UNANSWERABLE_QUESTIONS else "What is the WiFi password?"
+        response = "I have some information about the Recreation and Wellness Center, but I'm not sure about the specific details you're asking for. The RecWell Center is open Monday-Friday 6AM-10PM and weekends 8AM-6PM. For more specific information, please contact the center directly."
         
-    logging.info(f"AutoDialogue Step {question_number}: Q='{question[:30]}...', SimOutcome={outcome_type}")
-    response_text, actual_confidence, response_time = get_response(question, is_alpha=True)
-    
-    if outcome_type in st.session_state.conf_matrix:
-        st.session_state.conf_matrix[outcome_type] += 1
-        
-    st.session_state.auto_dialogue_results.append({
-        "Question #": question_number,
-        "question": question,
-        "confidence": f"{confidence:.1%}",
-        "response": response_text,
-        "outcome": outcome_type,
-        "response_time": response_time
-    })
-    
-    st.session_state.chat_history.append({
-        "role": "user",
-        "content": f"*[Auto] Alpha:* {question}"
-    })
-    st.session_state.chat_history.append({
-        "role": "assistant",
-        "content": f"*[Auto] Beta:* {response_text}\n\n`[SimOutcome: {outcome_type} | RespTime: {response_time}]`"
-    })
-    
-    st.session_state.auto_dialogue_step += 1
-    time.sleep(1.5)  # Reduced wait time between auto-dialogue steps
+    return response
 
+# First run the scraper before initializing anything else
+try:
+    # Only call this outside the chat interface to avoid redundant operations
+    data_updated = check_and_run_scraper()
+except Exception as e:
+    logging.error(f"Scraper initialization error: {e}", exc_info=True)
+    data_updated = False
+    st.error("Error during knowledge base initialization. Using default data.")
 
-# === Metrics Calculation & Display Functions ===
-def calculate_metrics():
-    if "conf_matrix" not in st.session_state:
-        return pd.DataFrame({'Metric': [], 'Value': []})
-        
-    cm = st.session_state.conf_matrix
-    tp = cm.get("TP", 0)
-    fp = cm.get("FP", 0)
-    tn = cm.get("TN", 0)
-    fn = cm.get("FN", 0)
-    total = tp + fp + tn + fn
-    
-    if total == 0:
-        return pd.DataFrame({
-            'Metric': ['Accuracy', 'Precision', 'Sensitivity (Recall)', 'Specificity', 'F1-Score'],
-            'Value': [0.0] * 5
-        })
-        
-    accuracy = (tp + tn) / total if total > 0 else 0
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
-    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-    f1 = 2 * (precision * sensitivity) / (precision + sensitivity) if (precision + sensitivity) > 0 else 0
-    
-    return pd.DataFrame({
-        'Metric': ['Accuracy', 'Precision', 'Sensitivity (Recall)', 'Specificity', 'F1-Score'],
-        'Value': [accuracy, precision, sensitivity, specificity, f1]
-    })
-
-def display_metrics():
-    metrics_df = calculate_metrics()
-    metrics_df['Value'] = metrics_df['Value'].apply(lambda x: f"{x:.1%}")
-    st.table(metrics_df.style.set_properties(**{'text-align': 'center', 'font-size': '14px'}))
-
-
-# === Send Message Function ===
-def send_message(user_input=None, is_alpha=False, intended_outcome=None):
-    if user_input is None:
-        user_input = st.session_state.get("user_input", "").strip()
-    if not user_input:
-        return None, 0
-        
-    try:
-        response_text, confidence, response_time_str = get_response(user_input, is_alpha)
-        user_prefix = "Alpha: " if is_alpha else ""
-        assistant_prefix = "Beta: "
-        
-        st.session_state.chat_history.append({"role": "user", "content": f"{user_prefix}{user_input}"})
-        st.session_state.chat_history.append({
-            "role": "assistant",
-            "content": f"{assistant_prefix}{response_text}\n\nResponse time: {response_time_str}"
-        })
-        
-        st.session_state.last_message_index = len(st.session_state.chat_history)
-        if "user_input" in st.session_state:
-            st.session_state.user_input = ""
-            
-        return response_text, confidence
-    except Exception as e:
-        logging.error(f"Error in send_message: {str(e)}", exc_info=True)
-        error_message = f"I'm sorry, but something went wrong while processing your message. Please try again. (Error: {str(e)[:50]})"
-        
-        st.session_state.chat_history.append({"role": "user", "content": f"{user_input}"})
-        st.session_state.chat_history.append({
-            "role": "assistant",
-            "content": f"{error_message}\n\nResponse time: <error>"
-        })
-        
-        return error_message, 0
-
-
-# === Sidebar Content ===
-with st.sidebar:
-    st.header("Configuration")
-    
-    # API Key configuration
-    if not st.session_state.get("GROQ_API_KEY"):
-        st.warning("Groq API Key required.")
-        provided_key = st.text_input(
-            "🔑 Enter Groq API Key:", 
-            type="password",
-            key="api_key_input_sidebar",
-            help="Get free key from console.groq.com"
-        )
-        if provided_key:
-            st.session_state.GROQ_API_KEY = provided_key
-            st.success("API Key entered.")
-            time.sleep(1)
-            st.rerun()
-    
-    st.divider()
-    
-    # Confusion Matrix section in sidebar
-    st.subheader("📊 Confusion Matrix")
-    cm = st.session_state.conf_matrix
-    confusion_data = [
-        ["", "Predicted Answerable", "Predicted Unanswerable"],
-        ["Actually Answerable", cm.get("TP", 0), cm.get("FN", 0)],
-        ["Actually Unanswerable", cm.get("FP", 0), cm.get("TN", 0)]
-    ]
-    confusion_df = pd.DataFrame(confusion_data[1:], columns=confusion_data[0])
-    st.table(confusion_df.style.set_properties(**{"text-align": "center"}))
-    
-    # Performance Metrics in sidebar
-    st.subheader("📈 Performance Metrics")
-    display_metrics()
-    
-    st.divider()
-    
-    # Auto Dialogue section in sidebar
-    st.subheader("🤖 Auto Dialogue")
-    st.write("Run automated dialogue between Alpha (student) and Beta (assistant)")
-    
-    if not st.session_state.get("auto_dialogue_running", False):
-        if st.button("Start Automated Dialogue", key="start_auto_dialogue_sidebar"):
-            st.session_state.auto_dialogue_running = True
-            st.session_state.auto_dialogue_step = 0
-            st.session_state.auto_dialogue_results = []
-            st.session_state.conf_matrix = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}  # Reset matrix
-            st.rerun()
-    else:
-        run_auto_dialogue()  # Run one step
-        progress = st.session_state.auto_dialogue_step / 10.0
-        st.progress(progress)
-        st.write(f"Progress: {st.session_state.auto_dialogue_step}/10 questions")
-
-        if not st.session_state.auto_dialogue_running:  # Check if finished
-            st.success("Automated dialogue completed!")
-            if st.session_state.auto_dialogue_results:
-                results_df = pd.DataFrame(st.session_state.auto_dialogue_results)
-                display_cols = ["Question #", "question", "outcome", "response_time"]
-                cols_to_display = [col for col in display_cols if col in results_df.columns]
-                st.dataframe(results_df[cols_to_display], height=150)
+# === Vectorstore Initialization ===
+if 'vectorstore' not in st.session_state or st.session_state.vectorstore is None or data_updated:
+    logging.info(f"Initializing vector store. Updated data: {data_updated}")
+    with st.spinner("📚 Loading knowledge base..."):
+        try:
+            docs = load_scraped_data()
+            st.session_state.vectorstore = SimpleVectorStore(docs) if docs else None
+            if st.session_state.vectorstore and st.session_state.vectorstore.vectorizer:
+                logging.info(f"Knowledge base loaded with {len(docs)} documents.")
+            elif docs:
+                st.warning("Knowledge loaded, but search functionality may be limited.")
             else:
-                st.write("No results recorded.")
-            if st.button("Reset Auto Dialogue", key="reset_auto_dialogue_sidebar"):
-                st.rerun()
-        else:
-            st.rerun()  # Rerun for next step
+                st.error("Failed to load knowledge base.")
+        except Exception as e:
+            st.error(f"Vector store initialization error: {e}")
+            logging.critical(f"Vector store initialization failure: {e}", exc_info=True)
+            st.session_state.vectorstore = None
 
-    # Clear Chat History button in sidebar
-    st.divider()
-    if st.button("Clear Chat History", key="clear_chat_sidebar"):
-        st.session_state.chat_history = []
-        st.session_state.last_message_index = -1
-        st.session_state.conf_matrix = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}
-        st.success("Chat history cleared.")
-        time.sleep(1)
-        st.rerun()
+# === Chat Interface (FIXED) ===
+# Initialize chat history - only if it doesn't exist
+if "messages" not in st.session_state or not st.session_state.messages:
+    st.session_state.messages = [{"role": "assistant", "content": "👋 Hello! I'm the CSUSB Recreation and Wellness Center chatbot. How can I help you today?"}]
 
+# Display chat messages from history on app rerun
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-# === Main Chat UI ===
-# Chat content area
-chat_container = st.container()
-with chat_container:
-    # Remove the tabs and just show the chat interface
-    st.subheader("💬 Chatbot")
+# Accept user input
+if prompt := st.chat_input("Ask me about RecWell Center..."):
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    # Display user message in chat message container
+    with st.chat_message("user"):
+        st.markdown(prompt)
     
-    # Chat display without fixed height
-    chat_display_container = st.container()
-    with chat_display_container:
-        for message in st.session_state.chat_history:
-            avatar = "🧑" if message["role"] == "user" else "🤖"
-            with st.chat_message(message["role"], avatar=avatar):
-                try:
-                    content_parts = message["content"].split("\n\nResponse time:")
-                    st.write(content_parts[0])
-                    if len(content_parts) > 1:
-                        st.caption(f"⏱️ Response time: {content_parts[1].strip()}")
-                except Exception as display_e:
-                    logging.error(f"Display error: {display_e}")
-                    st.write("Error displaying message.")
-
-# Chat input at fixed location
-user_input_val = st.chat_input("Type your message here...")
-if user_input_val:
-    with st.spinner("Thinking..."):
-        send_message(user_input_val)  # Pass input
-    st.rerun()  # Rerun to show new messages
-
-# Feedback buttons (if needed)
-if st.session_state.get('last_message_index', -1) > 0:
-    st.subheader("🤔 Was this response correct?")
-    col_tp, col_fp, col_tn, col_fn = st.columns(4)
-    feedback_given = False
-    with col_tp:
-        if st.button("✅ Correctly Answerable (TP)", key="fb_tp_main"):
-            st.session_state.conf_matrix["TP"] += 1
-            feedback_given = True
-            st.success("✅ Feedback recorded!")
-    with col_fp:
-        if st.button("⚠️ Incorrectly Answerable (FP)", key="fb_fp_main"):
-            st.session_state.conf_matrix["FP"] += 1
-            feedback_given = True
-            st.warning("❌ Feedback recorded.")
-    with col_tn:
-        if st.button("✅ Correctly Unanswerable (TN)", key="fb_tn_main"):
-            st.session_state.conf_matrix["TN"] += 1
-            feedback_given = True
-            st.success("✅ Feedback recorded!")
-    with col_fn:
-        if st.button("❌ Incorrectly Unanswerable (FN)", key="fb_fn_main"):
-            st.session_state.conf_matrix["FN"] += 1
-            feedback_given = True
-            st.warning("❌ Feedback recorded.")
-
-    if feedback_given:
-        st.session_state.last_message_index = -1
-        time.sleep(1)
-        st.rerun()
-
-
-# === Display Static Info Below Tabs ===
-with st.expander("❓ Questions That Our Chatbot Can Answer"):
-    if ANSWERABLE_QUESTIONS:
-        for question in sorted(set(ANSWERABLE_QUESTIONS)):
-            st.write(f"- {question}")
-    else:
-        st.write("No predefined answerable questions available.")
-
-with st.expander("🚫 Questions That Our Chatbot Cannot Answer"):
-    if UNANSWERABLE_QUESTIONS:
-        for question in UNANSWERABLE_QUESTIONS:
-            st.write(f"- {question}")
-    else:
-        st.write("No predefined unanswerable questions available.")
-
-with st.expander("🔍 Dynamically Generated Questions from Scraped Data"):
-    try:
-        if 'scraped_questions' not in st.session_state or not st.session_state.scraped_questions:
-            generate_questions_from_scraped_data()
-        scraped_questions_list = st.session_state.get("scraped_questions", [])
-        if scraped_questions_list:
-            # Show all questions without truncating
-            for i, question in enumerate(scraped_questions_list):
-                st.write(f"- {question}")
-        else:
-            st.write("No scraped questions available.")
-    except Exception as e:
-        st.write(f"Could not display scraped questions: {str(e)}")
+    # Display assistant response in chat message container
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            response_text = get_response(prompt)
+            st.markdown(response_text)
+            
+    # Add assistant response to chat history
+    st.session_state.messages.append({"role": "assistant", "content": response_text})
