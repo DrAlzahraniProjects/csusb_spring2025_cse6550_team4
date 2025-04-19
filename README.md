@@ -41,12 +41,11 @@ Update the repository to the latest version:
 git pull origin main
 ```
 
-### Step 5: Set Build Script
+### Step 5: Enable execute permissions for the Docker build and cleanup script:
 
-Run the setup script to build and start the Docker container:
 
 ```bash
-chmod +x docker-launch.sh
+chmod +x docker-launch.sh docker-cleanup.sh
 ```
 
 ### Step 6: Run Build Script (enter your Groq API Key when prompted):
@@ -61,13 +60,8 @@ For Streamlit:
 
 - Once the container starts, Open browser at http://localhost:2504/team4s25.
 
-### Step 8: Enable execute permissions for the Docker cleanup script:
 
-```bash
-chmod +x docker-cleanup.sh
-```
-
-### Step 9: Run the script to stop and remove the Docker image and container :
+### Step 8: Run the script to stop and remove the Docker image and container :
 
 ```bash
 ./docker-cleanup.sh
