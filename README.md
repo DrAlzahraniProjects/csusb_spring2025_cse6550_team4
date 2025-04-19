@@ -9,7 +9,15 @@ Before you begin, ensure you have the following:
 
 ---
 
-### Step 1: Clone the Repository
+### Step 1: Remove the existing code directory completely
+
+Because the Git repository can't been updated correctly, need to remove the directory first.
+
+```bash
+rm -rf csusb_spring2025_cse6550_team4 csusb_spring2025_cse6550_team4-new
+```
+
+### Step 2: Clone the Repository
 
 Clone the GitHub repository to your local machine:
 
@@ -17,7 +25,7 @@ Clone the GitHub repository to your local machine:
 git clone https://github.com/DrAlzahraniProjects/csusb_spring2025_cse6550_team4.git
 ```
 
-### Step 2: Navigate to the Repository
+### Step 3: Navigate to the Repository
 
 Change to the cloned repository directory:
 
@@ -25,7 +33,7 @@ Change to the cloned repository directory:
 cd csusb_spring2025_cse6550_team4
 ```
 
-### Step 3: Pull the Latest Version
+### Step 4: Pull the Latest Version
 
 Update the repository to the latest version:
 
@@ -33,7 +41,7 @@ Update the repository to the latest version:
 git pull origin main
 ```
 
-### Step 4: Set Build Script
+### Step 5: Set Build Script
 
 Run the setup script to build and start the Docker container:
 
@@ -41,25 +49,25 @@ Run the setup script to build and start the Docker container:
 chmod +x docker-launch.sh
 ```
 
-### Step 5: Run Build Script (enter your Groq API Key when prompted):
+### Step 6: Run Build Script (enter your Groq API Key when prompted):
 
 ```bash
 ./docker-launch.sh
 ```
 
-### Step 6: Access the Chatbot
+### Step 7: Access the Chatbot
 
 For Streamlit:
 
 - Once the container starts, Open browser at http://localhost:2504/team4s25.
 
-### Step 7: Enable execute permissions for the Docker cleanup script:
+### Step 8: Enable execute permissions for the Docker cleanup script:
 
 ```bash
 chmod +x docker-cleanup.sh
 ```
 
-### Step 8: Run the script to stop and remove the Docker image and container :
+### Step 9: Run the script to stop and remove the Docker image and container :
 
 ```bash
 ./docker-cleanup.sh
