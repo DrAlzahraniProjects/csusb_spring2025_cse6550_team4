@@ -7,21 +7,28 @@ WORKDIR /app
 # Copy only requirements first to leverage Docker caching
 COPY requirements.txt /app/
 
-# Install dependencies for Streamlit
+# Install system libs
 RUN apt-get update && \
     apt-get install -y \
-    libxml2-dev \
-    libxslt-dev \
-    libffi-dev \
-    build-essential \
-    gcc \
+      libxml2-dev \
+      libxslt-dev \
+      libffi-dev \
+      build-essential \
+      gcc \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install dependencies with no cache to save space
+# ─────────────── pytorch for cpu only ───────────────
+# Install CPU‑only PyTorch + sentence-transformers from the PyTorch index
+RUN pip install --no-cache-dir \
+      --extra-index-url https://download.pytorch.org/whl/cpu \
+      torch sentence-transformers
+# ─────────────────────────────────────────────
+
+# Install the rest of your Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy your Python code into the Docker container
+# Copy your Python code into the container
 COPY app.py /app
 
 # Copy the rest of the app files
