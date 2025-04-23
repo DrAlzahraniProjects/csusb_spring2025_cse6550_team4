@@ -5,9 +5,9 @@ python-dotenv
 beautifulsoup4
 scrapy
 lxml
-faiss-cpu
-sentence-transformers
 numpy
+faiss-cpu
 langchain
 langchain-community
 langchain-groq
+flashrank
