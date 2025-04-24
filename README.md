@@ -14,7 +14,7 @@ Before you begin, ensure you have the following:
 Because the local repository can't been updated correctly, need to remove the directory first.
 
 ```bash
-rm -rf csusb_spring2025_cse6550_team4 csusb_spring2025_cse6550_team4-new
+rm -rf csusb_spring2025_cse6550_team4
 ```
 
 ### Step 2: Clone the Repository
