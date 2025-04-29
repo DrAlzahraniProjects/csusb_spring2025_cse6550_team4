@@ -130,6 +130,11 @@ st.markdown("""
         border-radius: 10px;
         margin-bottom: 10px;
     }
+    
+    /* Clear chat button styling */
+    .clear-chat-btn {
+        margin-bottom: 20px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -270,80 +275,6 @@ def run_scrapy_if_changed():
             st.info("🔄 Knowledge base is up-to-date.")
         return False
 
-    # ────────────────────────────────────────
-
-    settings = get_project_settings()
-    settings.set("FEED_FORMAT", "json")
-    settings.set("FEED_URI", scraped_temp_file)
-    settings.set("LOG_LEVEL", "WARNING")
-
-    if os.path.exists(scraped_temp_file):
-        try:
-            os.remove(scraped_temp_file)
-        except OSError as e:
-            logging.warning(f"Could not remove old temp file {scraped_temp_file}: {e}")
-
-    try:
-        process = CrawlerProcess(settings)
-        process.crawl(ContentSpider)
-        process.start(stop_after_crawl=True)
-    except Exception as e:
-        if is_streamlit:
-            st.error(f"Web scraping error: {str(e)}")
-        return False
-
-    if os.path.exists(scraped_temp_file):
-        try:
-            with open(scraped_temp_file, "r", encoding="utf-8") as f:
-                temp_data_content = f.read()
-            if not temp_data_content or not temp_data_content.strip() or temp_data_content == '[]':
-                os.remove(scraped_temp_file)
-                return False
-            
-            json.loads(temp_data_content)
-            temp_hash = hash_scraped_output(temp_data_content)
-            
-            update_needed = False
-            if os.path.exists(scraped_final_file):
-                try:
-                    with open(scraped_final_file, "r", encoding="utf-8") as f:
-                        old_data_content = f.read()
-                    old_hash = hash_scraped_output(old_data_content) if old_data_content else None
-                    update_needed = (temp_hash != old_hash)
-                except Exception as hash_e:
-                    update_needed = True
-            else:
-                update_needed = True
-
-            if update_needed:
-                os.replace(scraped_temp_file, scraped_final_file)
-                if is_streamlit:
-                    st.success("✅ Knowledge base updated.")
-                return True
-            else:
-                os.remove(scraped_temp_file)
-                if is_streamlit:
-                    st.info("🔄 Knowledge base is up-to-date.")
-                return False
-                
-        except json.JSONDecodeError as e:
-            if os.path.exists(scraped_temp_file):
-                try:
-                    os.remove(scraped_temp_file)
-                except OSError as re:
-                    pass
-            return False
-            
-        except Exception as e:
-            if os.path.exists(scraped_temp_file):
-                try:
-                    os.remove(scraped_temp_file)
-                except OSError as re:
-                    pass
-            return False
-    else:
-        return False
-
 # === Data Loading Function ===
 def load_scraped_data(file_path="scraped_data.json"):
     if not os.path.exists(file_path):
@@ -360,7 +291,7 @@ def load_scraped_data(file_path="scraped_data.json"):
         seen = set()
 
         for item in data:
-            # now we look at the spider’s "segments" list instead of "text"
+            # now we look at the spider's "segments" list instead of "text"
             for seg in item.get("segments", []):
                 txt = normalize_text(seg)
  
@@ -390,12 +321,12 @@ Leverage all provided context to craft comprehensive, human-friendly answers.
 • For hours: list each facility and its hours as bullet points.
 • For location/contact: give full address or phone number.
 • When merging multiple sources, integrate seamlessly.
-• Provide clear, detailed information—don’t hold back relevant details.
-• If you don’t know something, briefly apologize and offer general front-desk info.
+• Provide clear, detailed information—don't hold back relevant details.
+• If you don't know something, briefly apologize and offer general front-desk info.
 • Keep your tone warm, confident, and informative.
-• Do NOT begin your answer with phrases like “According to the provided context” or “According to the provided documents.” Just answer the question directly.
-• If the question concerns a specific department or program (e.g. “Intramural Sports hours”), give that department’s phone number AND email address as listed on the site.
-• Do NOT invent or guess any contact info—only share what’s actually on the web.
+• Do NOT begin your answer with phrases like "According to the provided context" or "According to the provided documents." Just answer the question directly.
+• If the question concerns a specific department or program (e.g. "Intramural Sports hours"), give that department's phone number AND email address as listed on the site.
+• Do NOT invent or guess any contact info—only share what's actually on the web.
 
 Provide a concise and accurate answer based solely on the context below.
 If the context does not contain enough information to answer the question, respond with "I don't have enough information to answer this question." Do not generate, assume, or make up any details beyond the given context."""
@@ -431,7 +362,7 @@ def get_response(user_input):
     
     groq_key = st.session_state.get("GROQ_API_KEY")
     if not groq_key:
-        return "API Key needed for detailed responses. Please enter your Groq API key in the sidebar.", 0, format_response_time(start_time)
+        return "API Key needed for detailed responses. Please set the GROQ_API_KEY environment variable.", 0, format_response_time(start_time)
     
     headers = {
         "Authorization": f"Bearer {groq_key}",
@@ -562,36 +493,17 @@ else:
             if not emb:
                 st.error("Failed to initialize embedding model.")
 
-# === Sidebar Content ===
-with st.sidebar:
-    st.header("Configuration")
-    
-    # API Key configuration (hidden but functional)
-    if not st.session_state.get("GROQ_API_KEY"):
-        st.warning("Groq API Key required.")
-        provided_key = st.text_input(
-            "🔑 Enter Groq API Key:",
-            type="password",
-            key="api_key_input_sidebar",
-            help="Get free key from console.groq.com"
-        )
-        if provided_key:
-            st.session_state.GROQ_API_KEY = provided_key
-            st.success("API Key entered.")
-            time.sleep(1)
-            st.rerun()
-    
-    # Only Clear Chat History button
-    if st.button("Clear Chat History", key="clear_chat_sidebar"):
-        st.session_state.chat_history = []
-        st.success("Chat history cleared.")
-        time.sleep(1)
-        st.rerun()
-
 # === Main Chat UI ===
 chat_container = st.container()
 with chat_container:
     st.subheader("💬 Chatbot")
+    
+    # Add clear chat button at the top of the chat interface
+    if st.button("Clear Chat History", key="clear_chat_main"):
+        st.session_state.chat_history = []
+        st.success("Chat history cleared.")
+        time.sleep(1)
+        st.rerun()
     
     # Chat display
     for message in st.session_state.chat_history:
