@@ -21,6 +21,27 @@ import re
 from urllib.parse import urlparse
 from flashrank import Ranker, RerankRequest
 
+# --- Add IP Check Functions ---
+def get_user_ip() -> str:
+    try:
+        response = requests.get('https://api.ipify.org?format=json', timeout=None)
+        return response.json().get("ip", "")
+    except Exception:
+        return ""
+
+def is_US_ip(ip: str) -> bool:
+    try:
+        response = requests.get(f"http://ip-api.com/json/{ip}?fields=country", timeout=None)
+        return response.json().get("country", "").lower() == "united states"
+    except Exception:
+        return False
+
+# --- IP Check Block ---
+user_ip = get_user_ip()
+if not is_US_ip(user_ip):
+    st.error(f"Access to this webpage is prohibited.")
+    st.stop()
+
 INDEX_DIR = "faiss_index"
 
 # Configure basic logging
