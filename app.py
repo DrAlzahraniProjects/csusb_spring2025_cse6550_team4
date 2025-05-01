@@ -4,7 +4,6 @@ import streamlit as st
 import requests
 import pandas as pd
 from dotenv import load_dotenv
-import random
 import json
 # ─── Scrapy core ───
 import scrapy
@@ -77,7 +76,16 @@ with col2:
     )
 
 st.markdown(
-    "<h3 style='text-align: center; color: #666; margin-bottom: 1rem;'>Your Guide to Fitness, Fun & Adventure at CSUSB Recreation & Wellness</h3>",
+    """
+    <h3 style='text-align: center; color: #666; margin-bottom: 1rem;'>
+      Your Guide to Fitness, Fun & Adventure at&nbsp;
+      <a href="https://www.csusb.edu/recreation-wellness"
+         target="_blank"
+         style="color:#4A90E2; text-decoration: underline;">
+        CSUSB Recreation & Wellness
+      </a>
+    </h3>
+    """,
     unsafe_allow_html=True
 )
 
@@ -130,11 +138,6 @@ st.markdown("""
         border-radius: 10px;
         margin-bottom: 10px;
     }
-    
-    /* Clear chat button styling */
-    .clear-chat-btn {
-        margin-bottom: 20px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -147,11 +150,14 @@ def hash_scraped_output(output):
     if not isinstance(output, str): output = json.dumps(output, sort_keys=True)
     return hashlib.sha256(normalize_text(output).encode('utf-8')).hexdigest()
 
-def format_response_time(start_time):
-    end_time = time.time(); response_time = end_time - start_time
-    if response_time < 1: return f"{response_time*1000:.0f}ms"
-    if response_time < 60: return f"{response_time:.1f}s"
-    else: minutes = int(response_time // 60); seconds = response_time % 60; return f"{minutes}m {seconds:.1f}s"
+def format_response_time(elapsed: float) -> str:
+    if elapsed < 1:
+        return f"{elapsed*1000:.0f}ms"
+    if elapsed < 60:
+        return f"{elapsed:.1f}s"
+    minutes = int(elapsed // 60)
+    seconds = elapsed % 60
+    return f"{minutes}m {seconds:.1f}s"
 
 # ─── helper functions ───
 TAG_RE = re.compile(r'<[^>]+>')
@@ -275,6 +281,80 @@ def run_scrapy_if_changed():
             st.info("🔄 Knowledge base is up-to-date.")
         return False
 
+    # ────────────────────────────────────────
+
+    settings = get_project_settings()
+    settings.set("FEED_FORMAT", "json")
+    settings.set("FEED_URI", scraped_temp_file)
+    settings.set("LOG_LEVEL", "WARNING")
+
+    if os.path.exists(scraped_temp_file):
+        try:
+            os.remove(scraped_temp_file)
+        except OSError as e:
+            logging.warning(f"Could not remove old temp file {scraped_temp_file}: {e}")
+
+    try:
+        process = CrawlerProcess(settings)
+        process.crawl(ContentSpider)
+        process.start(stop_after_crawl=True)
+    except Exception as e:
+        if is_streamlit:
+            st.error(f"Web scraping error: {str(e)}")
+        return False
+
+    if os.path.exists(scraped_temp_file):
+        try:
+            with open(scraped_temp_file, "r", encoding="utf-8") as f:
+                temp_data_content = f.read()
+            if not temp_data_content or not temp_data_content.strip() or temp_data_content == '[]':
+                os.remove(scraped_temp_file)
+                return False
+            
+            json.loads(temp_data_content)
+            temp_hash = hash_scraped_output(temp_data_content)
+            
+            update_needed = False
+            if os.path.exists(scraped_final_file):
+                try:
+                    with open(scraped_final_file, "r", encoding="utf-8") as f:
+                        old_data_content = f.read()
+                    old_hash = hash_scraped_output(old_data_content) if old_data_content else None
+                    update_needed = (temp_hash != old_hash)
+                except Exception as hash_e:
+                    update_needed = True
+            else:
+                update_needed = True
+
+            if update_needed:
+                os.replace(scraped_temp_file, scraped_final_file)
+                if is_streamlit:
+                    st.success("✅ Knowledge base updated.")
+                return True
+            else:
+                os.remove(scraped_temp_file)
+                if is_streamlit:
+                    st.info("🔄 Knowledge base is up-to-date.")
+                return False
+                
+        except json.JSONDecodeError as e:
+            if os.path.exists(scraped_temp_file):
+                try:
+                    os.remove(scraped_temp_file)
+                except OSError as re:
+                    pass
+            return False
+            
+        except Exception as e:
+            if os.path.exists(scraped_temp_file):
+                try:
+                    os.remove(scraped_temp_file)
+                except OSError as re:
+                    pass
+            return False
+    else:
+        return False
+
 # === Data Loading Function ===
 def load_scraped_data(file_path="scraped_data.json"):
     if not os.path.exists(file_path):
@@ -291,7 +371,7 @@ def load_scraped_data(file_path="scraped_data.json"):
         seen = set()
 
         for item in data:
-            # now we look at the spider's "segments" list instead of "text"
+            # now we look at the spider’s "segments" list instead of "text"
             for seg in item.get("segments", []):
                 txt = normalize_text(seg)
  
@@ -321,12 +401,12 @@ Leverage all provided context to craft comprehensive, human-friendly answers.
 • For hours: list each facility and its hours as bullet points.
 • For location/contact: give full address or phone number.
 • When merging multiple sources, integrate seamlessly.
-• Provide clear, detailed information—don't hold back relevant details.
-• If you don't know something, briefly apologize and offer general front-desk info.
+• Provide clear, detailed information—don’t hold back relevant details.
+• If you don’t know something, briefly apologize and offer general front-desk info.
 • Keep your tone warm, confident, and informative.
-• Do NOT begin your answer with phrases like "According to the provided context" or "According to the provided documents." Just answer the question directly.
-• If the question concerns a specific department or program (e.g. "Intramural Sports hours"), give that department's phone number AND email address as listed on the site.
-• Do NOT invent or guess any contact info—only share what's actually on the web.
+• Do NOT begin your answer with phrases like “According to the provided context” or “According to the provided documents.” Just answer the question directly.
+• If the question concerns a specific department or program (e.g. “Intramural Sports hours”), give that department’s phone number AND email address as listed on the site.
+• Do NOT invent or guess any contact info—only share what’s actually on the web.
 
 Provide a concise and accurate answer based solely on the context below.
 If the context does not contain enough information to answer the question, respond with "I don't have enough information to answer this question." Do not generate, assume, or make up any details beyond the given context."""
@@ -357,54 +437,121 @@ def retrieve_relevant_docs(query, k=5):
         return f"Error retrieving documents: {str(e)}"
 
 def get_response(user_input):
-    start_time = time.time()
+    start = time.perf_counter()
+
+    # ────────────────────────────────────────────────────────────────────────────
+    # 0) Block any questions about other CSUSB departments
+    disallowed = [
+        "housing",
+        "residence",
+        "health center",
+        "student health",
+        "financial aid",
+        "admissions",
+        # …add more as needed…
+    ]
+    if any(term in user_input.lower() for term in disallowed):
+        elapsed = time.perf_counter() - start
+        return (
+            "I’m sorry, but I can only answer questions about CSUSB Recreation & Wellness. "
+            "Please ask me something from the RecWell website.",
+            0.0,
+            format_response_time(elapsed),
+        )
+    # ────────────────────────────────────────────────────────────────────────────
+
+    # 1) Gather context
     context = retrieve_relevant_docs(user_input)
-    
+
+    # If no RecWell docs were found, refuse to answer
+    if isinstance(context, str) and "No relevant documents found" in context:
+        elapsed = time.perf_counter() - start
+        return (
+            "I’m sorry, but I can only answer questions about CSUSB Recreation & Wellness. "
+            "Please ask me something about the RecWell website.",
+            0.0,
+            format_response_time(elapsed),
+        )
+    # ───────────────────────────────────────────────────────────────────────────
+
+    # 2) Missing-key early exit (now with real timing)
     groq_key = st.session_state.get("GROQ_API_KEY")
     if not groq_key:
-        return "API Key needed for detailed responses. Please set the GROQ_API_KEY environment variable.", 0, format_response_time(start_time)
-    
+        elapsed = time.perf_counter() - start
+        return (
+            "API Key needed for detailed responses. Please enter your Groq API key in the sidebar.",
+            0,
+            format_response_time(elapsed),
+        )
+
+    # 3) Build headers & messages
     headers = {
         "Authorization": f"Bearer {groq_key}",
         "Content-Type": "application/json"
     }
-    
     msgs = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Context:\n{context}\n\nQ: {user_input}"}
+        {"role": "system",  "content": SYSTEM_PROMPT},
+        {"role": "user",    "content": f"Context:\n{context}\n\nQ: {user_input}"}
     ]
-    
+
     try:
+        # 4) Do the API call
         resp = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
-            json={"model": "llama3-8b-8192", "messages": msgs, "temperature": 0.7, "max_tokens": 500},
+            json={
+                "model": "llama3-8b-8192",
+                "messages": msgs,
+                "temperature": 0.7,
+                "max_tokens": 500
+            },
             headers=headers,
             timeout=30
         )
-        
+
+        # 5) Handle non-200 errors
         if resp.status_code != 200:
             error_msg = f"API Error (Status {resp.status_code})"
             try:
-                error_data = resp.json()
-                if 'error' in error_data:
-                    error_msg += f": {error_data['error'].get('message', 'Unknown error')}"
+                err = resp.json().get("error", {})
+                error_msg += f": {err.get('message','Unknown error')}"
             except:
                 error_msg += ": Could not parse error response"
-            return f"Sorry, I encountered an issue: {error_msg}. Please try again later.", 0, format_response_time(start_time)
-            
-        api_resp = resp.json()
-        content = api_resp["choices"][0]["message"]["content"]
-        
-        return content, 0.8, format_response_time(start_time)
-        
+            elapsed = time.perf_counter() - start
+            return (
+                f"Sorry, I encountered an issue: {error_msg}. Please try again later.",
+                0,
+                format_response_time(elapsed),
+            )
+
+        # 6) Parse good response
+        content = resp.json()["choices"][0]["message"]["content"]
+        confidence = 0.8
+
+        # 7) Final timing
+        elapsed = time.perf_counter() - start
+        return content, confidence, format_response_time(elapsed)
+
     except requests.exceptions.Timeout:
-        return "I'm sorry, but I'm having trouble connecting to my knowledge base right now. Please try again in a moment.", 0.3, format_response_time(start_time)
-        
-    except requests.exceptions.RequestException as e:
-        return f"I'm having trouble processing your question. Please try again. (Error: Network issue)", 0.3, format_response_time(start_time)
-        
+        elapsed = time.perf_counter() - start
+        return (
+            "I'm sorry, but I'm having trouble connecting to my knowledge base right now. Please try again in a moment.",
+            0.3,
+            format_response_time(elapsed),
+        )
+    except requests.exceptions.RequestException:
+        elapsed = time.perf_counter() - start
+        return (
+            "I'm having trouble processing your question. Please try again. (Error: Network issue)",
+            0.3,
+            format_response_time(elapsed),
+        )
     except Exception as e:
-        return f"I'm having trouble processing your question. Please try again. (Error: {str(e)[:100]})", 0.3, format_response_time(start_time)
+        elapsed = time.perf_counter() - start
+        return (
+            f"I'm having trouble processing your question. Please try again. (Error: {str(e)[:100]})",
+            0.3,
+            format_response_time(elapsed),
+        )
 
 # === Send Message Function ===
 def send_message(user_input=None):
@@ -439,31 +586,18 @@ def send_message(user_input=None):
 
 # === Initialization ===
 if 'chat_history' not in st.session_state:
-    st.session_state.chat_history = []
+    st.session_state.chat_history = []	
 
-# === Conditional Scraper Run ===
-@st.cache_data(ttl=86400)
-def check_and_run_scraper():
-    data_file = "scraped_data.json"
-    needs_check = True
-    if os.path.exists(data_file):
-        try:
-            if (time.time() - os.path.getmtime(data_file)) < 86400:
-                needs_check = False
-        except Exception as e:
-            pass
-            
-    if needs_check:
-        with st.spinner("🔄 Checking updates..."):
-            try:
-                data_updated = run_scrapy_if_changed()
-                return data_updated
-            except Exception as e:
-                st.error(f"Update check error: {e}")
-                return False
-    return False
+# ─── Ensure knowledge base exists ───
+def ensure_knowledge_base():
+    json_exists  = os.path.exists("scraped_data.json")
+    faiss_exists = os.path.isdir(INDEX_DIR)
+    # Only scrape if neither file nor index exists
+    if not (json_exists and faiss_exists):
+        run_scrapy_if_changed()
 
-data_updated = check_and_run_scraper()
+# Call it once before we load/build FAISS
+ensure_knowledge_base()
 
 # === Vectorstore Initialization with FAISS ===
 emb = embedding_function
@@ -493,17 +627,11 @@ else:
             if not emb:
                 st.error("Failed to initialize embedding model.")
 
+
 # === Main Chat UI ===
 chat_container = st.container()
 with chat_container:
     st.subheader("💬 Chatbot")
-    
-    # Add clear chat button at the top of the chat interface
-    if st.button("Clear Chat History", key="clear_chat_main"):
-        st.session_state.chat_history = []
-        st.success("Chat history cleared.")
-        time.sleep(1)
-        st.rerun()
     
     # Chat display
     for message in st.session_state.chat_history:
