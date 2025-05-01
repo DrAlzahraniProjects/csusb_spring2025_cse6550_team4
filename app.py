@@ -398,7 +398,7 @@ def load_scraped_data(file_path="scraped_data.json"):
 SYSTEM_PROMPT = """You are Beta, the official AI guide for CSUSB Recreation & Wellness.
 Leverage all provided context to craft comprehensive, human-friendly answers.
 • Synthesize across pages into a single, cohesive response.
-• For hours: list each facility and its hours as bullet points.
+• When asked for hours, list each facility and its hours as a comma-separated list.  
 • For location/contact: give full address or phone number.
 • When merging multiple sources, integrate seamlessly.
 • Provide clear, detailed information—don’t hold back relevant details.
@@ -412,29 +412,39 @@ Provide a concise and accurate answer based solely on the context below.
 If the context does not contain enough information to answer the question, respond with "I don't have enough information to answer this question." Do not generate, assume, or make up any details beyond the given context."""
 
 def retrieve_relevant_docs(query, k=5):
-    if 'vectorstore' not in st.session_state or st.session_state.vectorstore is None:
+    vs = st.session_state.get("vectorstore")
+    if not vs:
         return "Vectorstore not available."
-        
+
     try:
-        start_time = time.time()
-        # stage 1: FAISS pull of a larger set
-        fetch_k = max(2*k, 10)
-        candidates = st.session_state.vectorstore.similarity_search(query, k=fetch_k)
+        # first pass: grab a lot more chunks for every query
+        fetch_k = max(2*k, 100)
+        candidates = vs.similarity_search(query, k=fetch_k)
+
+        # fallback: if no hits, try a broader search 
+        if not candidates:
+            candidates = vs.similarity_search(query, k=200)
+            if candidates:
+                logging.info("Fallback broader search returned results.")
+
         if not candidates:
             return "No relevant documents found."
 
-        # stage 2: rerank via FlashRank
+        # rerank and take top k
         docs = rerank_results(query, candidates, top_n=k)
-            
+
+        # build the context string
         context = ""
         MAX_LEN = 800
         for i, doc in enumerate(docs, 1):
-            src = f"(Source: {doc.metadata.get('url', '?')})" if doc.metadata.get("url") else ""
+            src = f"(Source: {doc.metadata.get('url','?')})"
             context += f"Doc {i}: {doc.page_content[:MAX_LEN]} {src}\n\n"
-            
+
         return context.strip()
+
     except Exception as e:
-        return f"Error retrieving documents: {str(e)}"
+        logging.error(f"Error in retrieve_relevant_docs: {e}")
+        return f"Error retrieving documents: {e}"
 
 def get_response(user_input):
     start = time.perf_counter()
@@ -602,17 +612,27 @@ ensure_knowledge_base()
 # === Vectorstore Initialization with FAISS ===
 emb = embedding_function
 
-# 1) If index folder exists, load it
 if os.path.isdir(INDEX_DIR):
-    # load on‑disk index (we trust our own pickle)
-    st.session_state.vectorstore = FAISS.load_local(
-        INDEX_DIR,
-        emb,
-        allow_dangerous_deserialization=True
-    )
-    st.success("✅ Loaded FAISS index from disk.")
+    try:
+        idx = FAISS.load_local(
+            INDEX_DIR,
+            emb,
+            allow_dangerous_deserialization=True
+        )
+        st.session_state.vectorstore = idx
+        st.success("✅ Loaded FAISS index from disk.")
+    except Exception as e:
+        logging.error(f"Failed to load FAISS index, rebuilding: {e}")
+        docs = load_scraped_data()
+        if docs and emb:
+            idx = FAISS.from_documents(documents=docs, embedding=emb)
+            idx.save_local(INDEX_DIR)
+            st.session_state.vectorstore = idx
+            st.success("⚙️ Rebuilt FAISS index after load failure.")
+        else:
+            st.session_state.vectorstore = None
+            st.error("❌ Could not initialize FAISS index.")
 else:
-    # 2) Otherwise, build from docs and save
     with st.spinner("📚 Loading knowledge base and creating embeddings..."):
         docs = load_scraped_data()
         if docs and emb:
