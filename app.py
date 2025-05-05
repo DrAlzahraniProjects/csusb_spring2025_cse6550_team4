@@ -273,9 +273,6 @@ def run_scrapy_if_changed():
     temp_file  = "scraped_data_temp.json"
     final_file = "scraped_data.json"
 
-    if os.path.exists(final_file) and time.time() - os.path.getmtime(final_file) < 86400:
-        return False
-
     settings = get_project_settings()
     settings.set("FEED_FORMAT", "json")
     settings.set("FEED_URI", temp_file)
