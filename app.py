@@ -21,6 +21,7 @@ from langchain.embeddings import HuggingFaceEmbeddings
 import re
 from urllib.parse import urlparse
 from flashrank import Ranker, RerankRequest
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # --- Add IP Check Functions ---
 def get_user_ip() -> str:
@@ -190,7 +191,20 @@ def clean_text(text: str) -> str:
     return WS_RE.sub(' ', no_tags).strip()
 
 def segment_text(text: str, max_chunk_size: int = 512) -> list[str]:
-    return [ text[i:i+max_chunk_size] for i in range(0, len(text), max_chunk_size) ]
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=max_chunk_size,
+        chunk_overlap=80,
+    )
+    chunks = splitter.split_text(text)
+
+    seen = set()
+    unique_chunks = []
+    for c in chunks:
+        normalized = normalize_text(c)
+        if len(normalized) > 20 and normalized not in seen:
+            seen.add(normalized)
+            unique_chunks.append(c)
+    return unique_chunks
 
 def rerank_results(question, documents, top_n=5):
     """Use FlashRank to rerank a small candidate set."""
@@ -303,80 +317,6 @@ def run_scrapy_if_changed():
             st.info("🔄 Knowledge base is up-to-date.")
         return False
 
-    # ────────────────────────────────────────
-
-    settings = get_project_settings()
-    settings.set("FEED_FORMAT", "json")
-    settings.set("FEED_URI", scraped_temp_file)
-    settings.set("LOG_LEVEL", "WARNING")
-
-    if os.path.exists(scraped_temp_file):
-        try:
-            os.remove(scraped_temp_file)
-        except OSError as e:
-            logging.warning(f"Could not remove old temp file {scraped_temp_file}: {e}")
-
-    try:
-        process = CrawlerProcess(settings)
-        process.crawl(ContentSpider)
-        process.start(stop_after_crawl=True)
-    except Exception as e:
-        if is_streamlit:
-            st.error(f"Web scraping error: {str(e)}")
-        return False
-
-    if os.path.exists(scraped_temp_file):
-        try:
-            with open(scraped_temp_file, "r", encoding="utf-8") as f:
-                temp_data_content = f.read()
-            if not temp_data_content or not temp_data_content.strip() or temp_data_content == '[]':
-                os.remove(scraped_temp_file)
-                return False
-            
-            json.loads(temp_data_content)
-            temp_hash = hash_scraped_output(temp_data_content)
-            
-            update_needed = False
-            if os.path.exists(scraped_final_file):
-                try:
-                    with open(scraped_final_file, "r", encoding="utf-8") as f:
-                        old_data_content = f.read()
-                    old_hash = hash_scraped_output(old_data_content) if old_data_content else None
-                    update_needed = (temp_hash != old_hash)
-                except Exception as hash_e:
-                    update_needed = True
-            else:
-                update_needed = True
-
-            if update_needed:
-                os.replace(scraped_temp_file, scraped_final_file)
-                if is_streamlit:
-                    st.success("✅ Knowledge base updated.")
-                return True
-            else:
-                os.remove(scraped_temp_file)
-                if is_streamlit:
-                    st.info("🔄 Knowledge base is up-to-date.")
-                return False
-                
-        except json.JSONDecodeError as e:
-            if os.path.exists(scraped_temp_file):
-                try:
-                    os.remove(scraped_temp_file)
-                except OSError as re:
-                    pass
-            return False
-            
-        except Exception as e:
-            if os.path.exists(scraped_temp_file):
-                try:
-                    os.remove(scraped_temp_file)
-                except OSError as re:
-                    pass
-            return False
-    else:
-        return False
-
 # === Data Loading Function ===
 def load_scraped_data(file_path="scraped_data.json"):
     if not os.path.exists(file_path):
@@ -417,30 +357,35 @@ def load_scraped_data(file_path="scraped_data.json"):
         return []
 
 # === Core Response Logic ===
-SYSTEM_PROMPT = """You are Beta, the official AI guide for CSUSB Recreation & Wellness.
-Leverage all provided context to craft comprehensive, human-friendly answers.
-• Synthesize across pages into a single, cohesive response.
-• When asked for hours, list each facility and its hours as a comma-separated list.  
-• For location/contact: give full address or phone number.
-• When merging multiple sources, integrate seamlessly.
-• Provide clear, detailed information—don’t hold back relevant details.
-• If you don’t know something, briefly apologize and offer general front-desk info.
-• Keep your tone warm, confident, and informative.
-• Do NOT begin your answer with phrases like “According to the provided context” or “According to the provided documents.” Just answer the question directly.
-• If the question concerns a specific department or program (e.g. “Intramural Sports hours”), give that department’s phone number AND email address as listed on the site.
-• Do NOT invent or guess any contact info—only share what’s actually on the web.
+SYSTEM_PROMPT = """You are the official AI assistant for CSUSB Recreation & Wellness.
 
-Provide a concise and accurate answer based solely on the context below.
-If the context does not contain enough information to answer the question, respond with "I don't have enough information to answer this question." Do not generate, assume, or make up any details beyond the given context."""
+Use the following context to answer the user's question clearly and professionally. Do not mention documents, sources, or context in your answer. Simply respond with accurate and helpful information as if you know it directly.
 
-def retrieve_relevant_docs(query, k=5):
+Guidelines:
+- Do NOT say things like “based on the context,” “the document says,” or “Doc 1 mentions.”
+- Just answer naturally, like a well-informed staff member.
+- If asked about hours or schedules, list them clearly in plain sentences (e.g., “The Aquatic Center is open from...”).
+- Only use contact info if it is explicitly in the context.
+- If you don’t have enough info, say: “I don’t have enough information to answer that.”
+- Never make up details.
+- Unless the user specifically mentions “Palm Desert” or “PDC,” assume the question is about the main CSUSB campus only. Do not include information about Palm Desert unless asked.
+Context:
+{context}
+
+Question:
+{user_question}
+
+Answer:
+"""
+
+def retrieve_relevant_docs(query, k=10):
     vs = st.session_state.get("vectorstore")
     if not vs:
         return "Vectorstore not available."
 
     try:
         # first pass: grab a lot more chunks for every query
-        fetch_k = max(2*k, 100)
+        fetch_k = max(4*k, 100)
         candidates = vs.similarity_search(query, k=fetch_k)
 
         # fallback: if no hits, try a broader search 
@@ -460,7 +405,7 @@ def retrieve_relevant_docs(query, k=5):
         MAX_LEN = 800
         for i, doc in enumerate(docs, 1):
             src = f"(Source: {doc.metadata.get('url','?')})"
-            context += f"Doc {i}: {doc.page_content[:MAX_LEN]} {src}\n\n"
+            context += f"{doc.page_content[:MAX_LEN]}\n\n"
 
         return context.strip()
 
@@ -500,6 +445,37 @@ RECREATIONAL_CLUBS_LIST = """**Recreational Clubs**
 """
 # ────────────────────────────────────
 
+def rewrite_query_with_groq(original_query: str, api_key: str) -> str:
+    prompt = f"""Rewrite the following user question so that it matches the kind of language used on a college recreation and wellness website. Be clear and keyword-rich.
+
+User question:
+{original_query}
+
+Rewritten query:"""
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    body = {
+        "model": "llama3-8b-8192",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3,
+        "max_tokens": 100
+    }
+
+    try:
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=body,
+            timeout=10
+        )
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logging.warning(f"Query rewrite failed: {e}")
+        return original_query
 
 def get_response(user_input):
     start = time.perf_counter()
@@ -565,8 +541,19 @@ def get_response(user_input):
         return RECREATIONAL_CLUBS_LIST, 1.0, format_response_time(elapsed)
 
 
-    # 1) Gather context
-    context = retrieve_relevant_docs(user_input)
+    # 1) Missing-key early exit (now with real timing)
+    groq_key = st.session_state.get("GROQ_API_KEY")
+    if not groq_key:
+        elapsed = time.perf_counter() - start
+        return (
+            "API Key needed for detailed responses. Please enter your Groq API key in the sidebar.",
+            0,
+            format_response_time(elapsed),
+        )
+
+    # 2) Gather context
+    rewritten_query = rewrite_query_with_groq(user_input, groq_key)
+    context = retrieve_relevant_docs(rewritten_query, k=10)
 
     # If no RecWell docs were found, refuse to answer
     if isinstance(context, str) and "No relevant documents found" in context:
@@ -578,16 +565,6 @@ def get_response(user_input):
             format_response_time(elapsed),
         )
     # ───────────────────────────────────────────────────────────────────────────
-
-    # 2) Missing-key early exit (now with real timing)
-    groq_key = st.session_state.get("GROQ_API_KEY")
-    if not groq_key:
-        elapsed = time.perf_counter() - start
-        return (
-            "API Key needed for detailed responses. Please enter your Groq API key in the sidebar.",
-            0,
-            format_response_time(elapsed),
-        )
 
     # 3) Build headers & messages
     headers = {
@@ -697,14 +674,12 @@ if 'chat_history' not in st.session_state:
 def ensure_knowledge_base():
     json_exists  = os.path.exists("scraped_data.json")
     faiss_exists = os.path.isdir(INDEX_DIR)
-    # Only scrape if neither file nor index exists
-    if not (json_exists and faiss_exists):
+    # Scrape if JSON is missing OR FAISS index folder is missing
+    if not json_exists or not faiss_exists:
         run_scrapy_if_changed()
 
 # Call it once before we load/build FAISS
 ensure_knowledge_base()
-
-# === Vectorstore Initialization with FAISS ===
 emb = embedding_function
 
 if os.path.isdir(INDEX_DIR):
