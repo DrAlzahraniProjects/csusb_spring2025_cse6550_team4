@@ -56,10 +56,7 @@ chmod +x docker-launch.sh docker-cleanup.sh
 
 ### Step 7: Access the Chatbot
 
-For Streamlit:
-
-- Once the container starts, Open browser at http://localhost:2504/team4s25.
-
+Once the container starts, Open browser at http://localhost:2504/team4s25.
 
 ### Step 8: Run the script to stop and remove the Docker image and container :
 
@@ -71,10 +68,7 @@ For Streamlit:
 
 ### Hosted on CSE department web server
 
-For Streamlit:
-
 Open browser at  https://sec.cse.csusb.edu/team4s25
-
 
 ## Google Colab Notebook  
 
