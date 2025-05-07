@@ -22,6 +22,11 @@ import re
 from urllib.parse import urlparse
 from flashrank import Ranker, RerankRequest
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from collections import Counter
+
+def pick_primary_url(urls: list[str]) -> str | None:
+    return urls[0] if urls else None
+
 
 # --- Add IP Check Functions ---
 def get_user_ip() -> str:
@@ -411,38 +416,6 @@ def retrieve_relevant_docs(query, k=10) -> tuple[str, list[str]]:
         return f"Error retrieving documents: {e}", []
 
 
-# ─── Hard-coded sports-club data ───
-SPRING_2025_PRACTICE_SCHEDULE = """
-**SPRING 2025 Sport Clubs Practice Schedules**
-
-| Club         | Monday               | Tuesday              | Wednesday            | Thursday             | Friday               | Saturday             |
-|--------------|----------------------|----------------------|----------------------|----------------------|----------------------|----------------------|
-| **Badminton**| 5:00 pm – 7:00 pm (DEN) |                      | 5:00 pm – 7:00 pm (DEN) |                      | 4:00 pm – 6:00 pm (DEN) |                      |
-| **Jiu Jitsu**| 6:45 pm – 8:45 pm (RW205) | 6:45 pm – 8:45 pm (RW205) | 6:45 pm – 8:45 pm (RW205) | 6:45 pm – 8:45 pm (RW205) |                      |                      |
-| **Karate**   |                      | 3:00 pm – 5:00 pm (RW205) |                      | 3:00 pm – 5:00 pm (RW205) |                      |                      |
-| **Men’s Soccer** |                  | 6:00 pm – 8:00 pm (PE Fields) |                      | 6:00 pm – 8:00 pm (PE Fields) |                      |                      |
-| **Running**  |                      |                      |                      | 10:00 am – 11:00 am (PE Fields) |                      | 10:00 am – 11:00 am (PE Fields) |
-| **Tennis**   |                      | 8:30 am – 10:30 am (TC)  |                      |                      | 8:30 am – 10:30 am (TC)  |                      |
-| **Wrestling**|                      |                      | 4:30 pm – 6:30 pm (RW205) |                      | 5:30 pm – 7:00 pm (RW205) |                      |
-"""
-
-COMPETITIVE_CLUBS_LIST = """**Competitive Clubs**  
-- Women’s Soccer Club  
-- PDC Soccer Club  
-- Men’s Soccer Club  
-- Cheer Club
-"""
-
-RECREATIONAL_CLUBS_LIST = """**Recreational Clubs**  
-- Sport Club – Badminton Club  
-- Sport Club – Powerlifting  
-- Sport Club – Wrestling  
-- Sport Club – Jiu Jitsu  
-- Sport Club – Karate  
-- Sport Club – Tennis
-"""
-# ────────────────────────────────────
-
 def rewrite_query_with_groq(original_query: str, api_key: str) -> str:
     prompt = f"""Rewrite the following user question so that it matches the kind of language used on a college recreation and wellness website. Be clear and keyword-rich.
 
@@ -496,47 +469,9 @@ def get_response(user_input):
             "Please ask me something from the RecWell website.",
             0.0,
             format_response_time(elapsed),
+            [] 
         )
 
-    # ─── Hard-coded shortcuts for sports-club queries ───
-    lc = user_input.lower()
-
-    # ─── Hard-coded shortcuts for sports-club queries ───
-    lc = user_input.lower()
-
-    # 0a) Combined list of all Sports Clubs
-    if "sports clubs" in lc or "list of sports clubs" in lc:
-        combined = (
-            "**Competitive Clubs**  \n"
-            "- Women’s Soccer Club  \n"
-            "- PDC Soccer Club  \n"
-            "- Men’s Soccer Club  \n"
-            "- Cheer Club\n\n"
-            "**Recreational Clubs**  \n"
-            "- Sport Club – Badminton Club  \n"
-            "- Sport Club – Powerlifting  \n"
-            "- Sport Club – Wrestling  \n"
-            "- Sport Club – Jiu Jitsu  \n"
-            "- Sport Club – Karate  \n"
-            "- Sport Club – Tennis"
-        )
-        elapsed = random.uniform(0.2, 0.5)
-        return combined, 1.0, format_response_time(elapsed)
-
-    # 0b) Practice schedule
-    if "practice schedule" in lc or "practice schedules" in lc:
-        elapsed = random.uniform(0.2, 0.5)
-        return SPRING_2025_PRACTICE_SCHEDULE, 1.0, format_response_time(elapsed)
-
-    # 0c) Competitive only
-    if "competitive clubs" in lc:
-        elapsed = random.uniform(0.2, 0.5)
-        return COMPETITIVE_CLUBS_LIST, 1.0, format_response_time(elapsed)
-
-    # 0d) Recreational only
-    if "recreational clubs" in lc:
-        elapsed = random.uniform(0.2, 0.5)
-        return RECREATIONAL_CLUBS_LIST, 1.0, format_response_time(elapsed)
 
 
     # 1) Missing-key early exit (now with real timing)
@@ -547,6 +482,7 @@ def get_response(user_input):
             "API Key needed for detailed responses. Please enter your Groq API key in the sidebar.",
             0,
             format_response_time(elapsed),
+            []
         )
 
     # 2) Gather context
@@ -561,6 +497,7 @@ def get_response(user_input):
             "Please ask me something about the RecWell website.",
             0.0,
             format_response_time(elapsed),
+            []
         )
     # ───────────────────────────────────────────────────────────────────────────
 
@@ -601,6 +538,7 @@ def get_response(user_input):
                 f"Sorry, I encountered an issue: {error_msg}. Please try again later.",
                 0,
                 format_response_time(elapsed),
+                []
             )
 
         # 6) Parse good response
@@ -617,6 +555,7 @@ def get_response(user_input):
             "I'm sorry, but I'm having trouble connecting to my knowledge base right now. Please try again in a moment.",
             0.3,
             format_response_time(elapsed),
+            []
         )
     except requests.exceptions.RequestException:
         elapsed = time.perf_counter() - start
@@ -624,6 +563,7 @@ def get_response(user_input):
             "I'm having trouble processing your question. Please try again. (Error: Network issue)",
             0.3,
             format_response_time(elapsed),
+            []
         )
     except Exception as e:
         elapsed = time.perf_counter() - start
@@ -631,6 +571,7 @@ def get_response(user_input):
             f"I'm having trouble processing your question. Please try again. (Error: {str(e)[:100]})",
             0.3,
             format_response_time(elapsed),
+            [] 
         )
 
 # === Send Message Function ===
@@ -639,20 +580,21 @@ def send_message(user_input=None):
         user_input = st.session_state.get("user_input", "").strip()
     if not user_input:
         return None, 0
-        
+
     try:
         response_text, confidence, response_time_str, source_urls = get_response(user_input)
-        
+
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         st.session_state.chat_history.append({
             "role":    "assistant",
             "content": response_text,
-            "sources": source_urls    # attach the URLs here
+            # only attach sources if we flagged it as RecWell
+            "sources": source_urls 
         })
-        
+
         if "user_input" in st.session_state:
             st.session_state.user_input = ""
-            
+
         return response_text, confidence
     except Exception as e:
         error_message = f"I'm sorry, but something went wrong while processing your message. Please try again. (Error: {str(e)[:50]})"
@@ -729,9 +671,9 @@ with chat_container:
         
             # Only show the first URL, as full text
             if message["role"] == "assistant" and message.get("sources"):
-                first_url = message["sources"][0]
-                if first_url:
-                    st.write(first_url)    
+                primary = pick_primary_url(message["sources"])
+                if primary:
+                    st.markdown(f"🔗 Source: [{primary}]({primary})")
 
 # Chat input
 user_input_val = st.chat_input("Type your message here...")
