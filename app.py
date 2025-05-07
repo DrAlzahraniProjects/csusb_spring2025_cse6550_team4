@@ -375,13 +375,13 @@ Question:
 Answer:
 """
 
-def retrieve_relevant_docs(query, k=10):
+def retrieve_relevant_docs(query, k=10) -> tuple[str, list[str]]:
     vs = st.session_state.get("vectorstore")
     if not vs:
-        return "Vectorstore not available."
+        return "", []
 
     try:
-        # first pass: grab a lot more chunks for every query
+        # first pass: grab a lot more chunks
         fetch_k = max(4*k, 100)
         candidates = vs.similarity_search(query, k=fetch_k)
 
@@ -392,7 +392,7 @@ def retrieve_relevant_docs(query, k=10):
                 logging.info("Fallback broader search returned results.")
 
         if not candidates:
-            return "No relevant documents found."
+            return "", []
 
         # rerank and take top k
         docs = rerank_results(query, candidates, top_n=k)
@@ -400,15 +400,16 @@ def retrieve_relevant_docs(query, k=10):
         # build the context string
         context = ""
         MAX_LEN = 800
-        for i, doc in enumerate(docs, 1):
-            src = f"(Source: {doc.metadata.get('url','?')})"
+        for doc in docs:
             context += f"{doc.page_content[:MAX_LEN]}\n\n"
 
-        return context.strip()
+        # collect the URLs alongside the text
+        urls = [doc.metadata.get("url", "") for doc in docs]
+        return context.strip(), urls
 
     except Exception as e:
-        logging.error(f"Error in retrieve_relevant_docs: {e}")
-        return f"Error retrieving documents: {e}"
+        return f"Error retrieving documents: {e}", []
+
 
 # ─── Hard-coded sports-club data ───
 SPRING_2025_PRACTICE_SCHEDULE = """
@@ -550,7 +551,7 @@ def get_response(user_input):
 
     # 2) Gather context
     rewritten_query = rewrite_query_with_groq(user_input, groq_key)
-    context = retrieve_relevant_docs(rewritten_query, k=10)
+    context, source_urls = retrieve_relevant_docs(rewritten_query, k=10)
 
     # If no RecWell docs were found, refuse to answer
     if isinstance(context, str) and "No relevant documents found" in context:
@@ -608,7 +609,7 @@ def get_response(user_input):
 
         # 7) Final timing
         elapsed = time.perf_counter() - start
-        return content, confidence, format_response_time(elapsed)
+        return content, confidence, format_response_time(elapsed), source_urls
 
     except requests.exceptions.Timeout:
         elapsed = time.perf_counter() - start
@@ -640,12 +641,13 @@ def send_message(user_input=None):
         return None, 0
         
     try:
-        response_text, confidence, response_time_str = get_response(user_input)
+        response_text, confidence, response_time_str, source_urls = get_response(user_input)
         
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         st.session_state.chat_history.append({
-            "role": "assistant",
-            "content": f"{response_text}\n\nResponse time: {response_time_str}"
+            "role":    "assistant",
+            "content": response_text,
+            "sources": source_urls    # attach the URLs here
         })
         
         if "user_input" in st.session_state:
@@ -687,7 +689,6 @@ if os.path.isdir(INDEX_DIR):
             allow_dangerous_deserialization=True
         )
         st.session_state.vectorstore = idx
-        st.success("✅ Loaded FAISS index from disk.")
     except Exception as e:
         logging.error(f"Failed to load FAISS index, rebuilding: {e}")
         docs = load_scraped_data()
@@ -724,13 +725,13 @@ with chat_container:
     for message in st.session_state.chat_history:
         avatar = "🧑" if message["role"] == "user" else "🤖"
         with st.chat_message(message["role"], avatar=avatar):
-            try:
-                content_parts = message["content"].split("\n\nResponse time:")
-                st.write(content_parts[0])
-                if len(content_parts) > 1:
-                    st.caption(f"⏱️ Response time: {content_parts[1].strip()}")
-            except Exception as display_e:
-                st.write("Error displaying message.")
+            st.write(message["content"])
+        
+            # Only show the first URL, as full text
+            if message["role"] == "assistant" and message.get("sources"):
+                first_url = message["sources"][0]
+                if first_url:
+                    st.write(first_url)    
 
 # Chat input
 user_input_val = st.chat_input("Type your message here...")
