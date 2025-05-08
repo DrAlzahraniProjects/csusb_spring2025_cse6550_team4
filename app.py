@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 from flashrank import Ranker, RerankRequest
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from collections import Counter
+import numpy as np
 
 def pick_primary_url(urls: list[str]) -> str | None:
     return urls[0] if urls else None
@@ -120,6 +121,12 @@ st.markdown(
 # --- Custom CSS ---
 st.markdown("""
 <style>
+            
+    /* Hide the "Deploy" button in the top-right corner */
+    header {
+        visibility: hidden;
+    }
+
     /* Adjust page header */
     h1 {
         padding-top: 0;
@@ -380,40 +387,42 @@ Question:
 Answer:
 """
 
-def retrieve_relevant_docs(query, k=10) -> tuple[str, list[str]]:
+def retrieve_relevant_docs(query, k=10) -> tuple[str, list[str], list[Document]]:
     vs = st.session_state.get("vectorstore")
     if not vs:
-        return "", []
+        return "", [], []
 
     try:
-        # first pass: grab a lot more chunks
-        fetch_k = max(4*k, 100)
+        # First-pass: fetch more candidates than needed
+        fetch_k = max(4 * k, 100)
         candidates = vs.similarity_search(query, k=fetch_k)
 
-        # fallback: if no hits, try a broader search 
+        # Fallback broader search if no candidates found
         if not candidates:
             candidates = vs.similarity_search(query, k=200)
             if candidates:
                 logging.info("Fallback broader search returned results.")
 
         if not candidates:
-            return "", []
+            return "", [], []
 
-        # rerank and take top k
+        # Rerank and take top-k
         docs = rerank_results(query, candidates, top_n=k)
 
-        # build the context string
+        # Build the context string
         context = ""
         MAX_LEN = 800
         for doc in docs:
             context += f"{doc.page_content[:MAX_LEN]}\n\n"
 
-        # collect the URLs alongside the text
+        # For now, we skip URL filtering — this will be done later in get_response
         urls = [doc.metadata.get("url", "") for doc in docs]
-        return context.strip(), urls
+
+        return context.strip(), urls, docs
 
     except Exception as e:
-        return f"Error retrieving documents: {e}", []
+        return f"Error retrieving documents: {e}", [], []
+
 
 
 def rewrite_query_with_groq(original_query: str, api_key: str) -> str:
@@ -448,11 +457,32 @@ Rewritten query:"""
         logging.warning(f"Query rewrite failed: {e}")
         return original_query
 
+embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+def find_best_doc_by_semantic_similarity(answer: str, docs: list[Document]) -> str:
+    try:
+        answer_vec = embed_model.embed_query(answer)
+        best_score = -1.0
+        best_url = ""
+
+        for doc in docs:
+            doc_vec = embed_model.embed_query(doc.page_content)
+            sim = cosine_similarity(answer_vec, doc_vec)
+            if sim > best_score:
+                best_score = sim
+                best_url = doc.metadata.get("url", "")
+
+        return best_url
+    except Exception as e:
+        logging.warning(f"Semantic matching failed: {e}")
+        return ""
+
 def get_response(user_input):
     start = time.perf_counter()
 
-    # ────────────────────────────────────────────────────────────────────────────
-    # 0) Block any questions about other CSUSB departments
     disallowed = [
         "housing",
         "residence",
@@ -460,7 +490,6 @@ def get_response(user_input):
         "student health",
         "financial aid",
         "admissions",
-        # …add more as needed…
     ]
     if any(term in user_input.lower() for term in disallowed):
         elapsed = time.perf_counter() - start
@@ -469,12 +498,9 @@ def get_response(user_input):
             "Please ask me something from the RecWell website.",
             0.0,
             format_response_time(elapsed),
-            [] 
+            []
         )
 
-
-
-    # 1) Missing-key early exit (now with real timing)
     groq_key = st.session_state.get("GROQ_API_KEY")
     if not groq_key:
         elapsed = time.perf_counter() - start
@@ -485,11 +511,12 @@ def get_response(user_input):
             []
         )
 
-    # 2) Gather context
+    # 1. Rewrite query
     rewritten_query = rewrite_query_with_groq(user_input, groq_key)
-    context, source_urls = retrieve_relevant_docs(rewritten_query, k=10)
 
-    # If no RecWell docs were found, refuse to answer
+    # 2. Get docs
+    context, _, docs_used = retrieve_relevant_docs(rewritten_query, k=10)
+
     if isinstance(context, str) and "No relevant documents found" in context:
         elapsed = time.perf_counter() - start
         return (
@@ -499,20 +526,17 @@ def get_response(user_input):
             format_response_time(elapsed),
             []
         )
-    # ───────────────────────────────────────────────────────────────────────────
 
-    # 3) Build headers & messages
     headers = {
         "Authorization": f"Bearer {groq_key}",
         "Content-Type": "application/json"
     }
     msgs = [
-        {"role": "system",  "content": SYSTEM_PROMPT},
-        {"role": "user",    "content": f"Context:\n{context}\n\nQ: {user_input}"}
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"Context:\n{context}\n\nQ: {user_input}"}
     ]
 
     try:
-        # 4) Do the API call
         resp = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             json={
@@ -525,7 +549,6 @@ def get_response(user_input):
             timeout=30
         )
 
-        # 5) Handle non-200 errors
         if resp.status_code != 200:
             error_msg = f"API Error (Status {resp.status_code})"
             try:
@@ -541,13 +564,14 @@ def get_response(user_input):
                 []
             )
 
-        # 6) Parse good response
         content = resp.json()["choices"][0]["message"]["content"]
         confidence = 0.8
 
-        # 7) Final timing
+        # 3. Use semantic similarity to find best source URL
+        best_url = find_best_doc_by_semantic_similarity(content, docs_used)
+
         elapsed = time.perf_counter() - start
-        return content, confidence, format_response_time(elapsed), source_urls
+        return content, confidence, format_response_time(elapsed), [best_url] if best_url else []
 
     except requests.exceptions.Timeout:
         elapsed = time.perf_counter() - start
@@ -571,8 +595,9 @@ def get_response(user_input):
             f"I'm having trouble processing your question. Please try again. (Error: {str(e)[:100]})",
             0.3,
             format_response_time(elapsed),
-            [] 
+            []
         )
+
 
 # === Send Message Function ===
 def send_message(user_input=None):
@@ -638,7 +663,7 @@ if os.path.isdir(INDEX_DIR):
             idx = FAISS.from_documents(documents=docs, embedding=emb)
             idx.save_local(INDEX_DIR)
             st.session_state.vectorstore = idx
-            st.success("⚙️ Rebuilt FAISS index after load failure.")
+            st.success("⚙️ Rebuilt FAISS  index after load failure.")
         else:
             st.session_state.vectorstore = None
             st.error("❌ Could not initialize FAISS index.")
